@@ -1216,7 +1216,8 @@ let DB;
 function load(){
   try{ const raw = localStorage.getItem(KEY); if(raw){ DB = JSON.parse(raw); migrate(); return; } }catch(e){}
   DB = JSON.parse(JSON.stringify(SEED)); migrate();
-  save(false);
+  DB.updatedAt = '1970-01-01T00:00:00.000Z'; // 시드 상태 — 원격 데이터가 있으면 항상 원격 우선
+  try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){}
 }
 function migrate(){
   // v1 저장본에 캘린더/과거 일지가 없으면 시드에서 보충
