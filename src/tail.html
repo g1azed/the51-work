@@ -1,0 +1,522 @@
+
+// ================== 저장소 ==================
+const KEY = 'the51x-work-v1';
+let DB;
+function load(){
+  try{ const raw = localStorage.getItem(KEY); if(raw){ DB = JSON.parse(raw); migrate(); return; } }catch(e){}
+  DB = JSON.parse(JSON.stringify(SEED)); migrate();
+  save(false);
+}
+function migrate(){
+  // v1 저장본에 캘린더/과거 일지가 없으면 시드에서 보충
+  if(!DB.cal){ DB.cal = JSON.parse(JSON.stringify(SEED.cal)); }
+  ['calStatus','quad'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
+  DB.options.quad = [...QUADS];
+  DB.cal.forEach(c=>{ if(QUAD_MIGRATE[c.quad]) c.quad = QUAD_MIGRATE[c.quad]; });
+  SEED.months.forEach(sm=>{ if(!DB.months.find(m=>m.key===sm.key)) DB.months.push(JSON.parse(JSON.stringify(sm))); });
+}
+function save(show=true){
+  DB.updatedAt = new Date().toISOString();
+  try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ toast('저장 실패: 브라우저 저장공간을 확인하세요'); }
+  render();
+  if(show) toast('저장됨');
+  schedulePush();
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ================== 날짜 유틸 ==================
+const DOW = ['일','월','화','수','목','금','토'];
+const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+function dow(dateStr){ if(!dateStr) return ''; const [y,m,d]=dateStr.split('-').map(Number); return DOW[new Date(y,m-1,d).getDay()]; }
+function daysLeft(dateStr){ if(!dateStr) return null; const [y,m,d]=dateStr.split('-').map(Number); const t=new Date(); t.setHours(0,0,0,0); return Math.round((new Date(y,m-1,d)-t)/86400000); }
+function dueChip(dateStr, done){
+  if(!dateStr) return '';
+  const n = daysLeft(dateStr);
+  if(done) return `<span class="chip due">${dateStr}</span>`;
+  const label = n===0 ? 'D-Day' : n>0 ? `D-${n}` : `D+${-n}`;
+  return `<span class="chip due ${n===0?'today':n<0?'over':''}" title="${dateStr}">${label} · ${dateStr.slice(5)} (${dow(dateStr)})</span>`;
+}
+const isDone = s => ['완료','취소','없음'].includes(s);
+
+// ================== 렌더 ==================
+function render(){
+  document.getElementById('todayLabel').textContent = `${todayStr()} (${dow(todayStr())})`;
+  renderStats(); renderTodos(); renderProjects(); renderNotes(); renderMonths(); renderCal();
+}
+function renderStats(){
+  const openT = DB.todos.filter(t=>!isDone(t.status)).length;
+  const over = DB.todos.filter(t=>!isDone(t.status) && t.date && daysLeft(t.date)<0).length;
+  const proj = DB.projects.filter(p=>!isDone(p.status)).length;
+  const mk = todayStr().slice(0,7); const m = DB.months.find(x=>x.key===mk);
+  const logs = m ? m.entries.filter(e=>e.log.trim()).length : 0;
+  document.getElementById('stats').innerHTML =
+    `<div class="stat"><b>${openT}</b><span>진행 중 할 일</span></div>`+
+    `<div class="stat"><b style="color:${over?'var(--red)':'var(--accent-ink)'}">${over}</b><span>기한 지남</span></div>`+
+    `<div class="stat"><b>${proj}</b><span>진행 중 프로젝트</span></div>`+
+    `<div class="stat"><b>${logs}</b><span>이번 달 일지 작성일</span></div>`+
+    `<div class="stat"><b>${DB.cal.filter(c=>!c.done && c.start && c.start.slice(0,7)===mk).length}</b><span>이번 달 미완료 일정</span></div>`;
+}
+function todoHTML(t, compact=false){
+  const p = DB.projects.find(p=>p.id===t.project);
+  const done = isDone(t.status);
+  return `<div class="todo ${done?'done':''}" data-id="${t.id}">
+    <input type="checkbox" class="chk" ${t.status==='완료'?'checked':''} aria-label="완료 처리" data-act="toggle">
+    <div class="body">
+      <div class="name" data-act="edit" title="클릭하여 수정">${esc(t.name)}</div>
+      <div class="meta">
+        <span class="chip s-${esc(t.status)}">${esc(t.status)}</span>
+        ${(t.tags||[]).map(x=>`<span class="chip t-${esc(x)}">${esc(x)}</span>`).join('')}
+        ${dueChip(t.date, done)}
+        ${(!compact && p) ? `<span class="chip rel">${esc(p.name)}</span>` : ''}
+      </div>
+    </div>
+    <button class="btn sm ghost act" data-act="edit" aria-label="수정">✎</button>
+  </div>`;
+}
+function renderTodos(){
+  const showDone = document.getElementById('todoShowDone').checked;
+  const pf = document.getElementById('todoFilterProject');
+  const cur = pf.value;
+  pf.innerHTML = '<option value="">전체 프로젝트</option>' + DB.projects.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  pf.value = cur;
+  const order = s => ({'대기':0,'진행':1,'검토':2,'보류':3,'완료':4,'없음':5,'취소':6}[s] ?? 9);
+  let list = DB.todos.filter(t => (showDone || !isDone(t.status)) && (!cur || t.project===cur));
+  list.sort((a,b)=> order(a.status)-order(b.status) || (b.tags||[]).length-(a.tags||[]).length || (a.date||'9').localeCompare(b.date||'9'));
+  document.getElementById('todoCnt').textContent = `${list.length}건`;
+  document.getElementById('todoList').innerHTML = list.length ? list.map(t=>todoHTML(t)).join('') : '<div class="empty">할 일이 없습니다 🎉</div>';
+}
+function renderProjects(){
+  const f = document.getElementById('projFilter').value;
+  let list = DB.projects.filter(p => f==='all' || (f==='active' ? !isDone(p.status) : isDone(p.status)));
+  document.getElementById('projCnt').textContent = `${list.length}건`;
+  document.getElementById('projList').innerHTML = list.length ? list.map(p=>{
+    const subs = DB.todos.filter(t=>t.project===p.id);
+    const done = subs.filter(t=>t.status==='완료').length;
+    const pct = subs.length ? Math.round(done/subs.length*100) : 0;
+    const left = daysLeft(p.date);
+    return `<div class="card st-${esc(p.status)}" data-id="${p.id}">
+      <div class="title" data-act="edit" title="클릭하여 수정">${esc(p.name)}</div>
+      <div class="row"><span class="chip s-${esc(p.status)}">${esc(p.status)}</span>${p.related?`<span class="chip rel">${esc(p.related)}</span>`:''}${p.date?`<span class="chip due ${!isDone(p.status)&&left===0?'today':''}">${p.date}${!isDone(p.status)&&left!==null&&left>=0?` · D-${left}`:''}</span>`:''}</div>
+      ${p.memo?`<div class="memo">${esc(p.memo)}</div>`:''}
+      ${subs.length?`<div class="pct"><span>완료율</span><span>${done}/${subs.length} · ${pct}%</span></div><div class="bar"><i style="width:${pct}%"></i></div>
+        <div class="sub">${subs.map(t=>todoHTML(t,true)).join('')}</div>`:''}
+      <div class="row"><button class="btn sm ghost" data-act="addsub">+ 할 일</button></div>
+      <div class="act"><button class="btn sm ghost" data-act="edit" aria-label="수정">✎</button></div>
+    </div>`;
+  }).join('') : '<div class="empty" style="grid-column:1/-1">프로젝트가 없습니다</div>';
+}
+function renderNotes(){
+  document.getElementById('noteList').innerHTML = DB.notes.length ? DB.notes.map(n=>`<div class="note" data-id="${n.id}">
+    <h3>${esc(n.title)}</h3><pre>${esc(n.body)}</pre>
+    <div class="act"><button class="btn sm ghost" data-act="edit" aria-label="수정">✎</button></div></div>`).join('') : '<div class="empty">메모가 없습니다</div>';
+}
+let openMonths = null;
+function fmtLog(s, q){
+  let h = esc(s)
+    .replace(/\[([A-Z]+-[\d,\/ A-Z-]+)\]/g,'<span class="tk">[$1]</span>')
+    .replace(/^(→|&gt;)/gm,'<span class="arrow">$1</span>');
+  if(q){ const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'); h = h.replace(re, m=>`<mark>${m}</mark>`); }
+  return h;
+}
+function renderMonths(){
+  const q = document.getElementById('jSearch').value.trim();
+  const box = document.getElementById('months');
+  if(openMonths===null){ openMonths = new Set([todayStr().slice(0,7)]); }
+  const months = [...DB.months].sort((a,b)=>b.key.localeCompare(a.key));
+  const t = todayStr();
+  box.innerHTML = months.map(m=>{
+    let entries = [...m.entries].sort((a,b)=>a.date.localeCompare(b.date));
+    if(q) entries = entries.filter(e=> (e.log+e.memo).toLowerCase().includes(q.toLowerCase()));
+    if(q && !entries.length) return '';
+    const open = q || openMonths.has(m.key);
+    return `<details class="month" data-key="${m.key}" ${open?'open':''}>
+      <summary>${m.key.replace('-','.')}<span class="cnt">${entries.length}일 기록</span><span class="spacer"></span><button class="btn sm ghost" data-act="delmonth" aria-label="월 삭제">🗑</button></summary>
+      <div class="tbl"><table class="j"><thead><tr><th>날짜</th><th>일지</th><th>비고</th><th></th></tr></thead><tbody>
+      ${entries.map(e=>`<tr class="${e.date===t?'today':''} ${!e.log.trim()&&e.memo.trim()?'off':''}" data-id="${e.id}">
+        <td class="d">${e.date.slice(5).replace('-','.')} <span class="chip dow">${dow(e.date)}</span><small>${e.date}</small></td>
+        <td class="log" contenteditable="plaintext-only" data-f="log" spellcheck="false">${fmtLog(e.log,q)}</td>
+        <td class="memo" contenteditable="plaintext-only" data-f="memo" spellcheck="false">${fmtLog(e.memo,q)}</td>
+        <td class="ops"><button class="btn sm ghost" data-act="delentry" aria-label="삭제">🗑</button></td></tr>`).join('') || `<tr><td colspan="4" class="empty">기록이 없습니다</td></tr>`}
+      </tbody></table></div>
+      <div class="month-foot"><input type="date" class="btn sm" data-f="newdate" value="${m.key===t.slice(0,7)?t:m.key+'-01'}" style="font-weight:500"><button class="btn sm primary" data-act="addentry">+ 날짜 추가</button><span class="hint">일지·비고 칸을 클릭해 바로 입력하고, 칸 밖을 클릭하면 자동 저장됩니다.</span></div>
+    </details>`;
+  }).join('') || '<div class="empty">월을 추가해 일지를 시작하세요</div>';
+}
+
+// ================== 모달 ==================
+const modal = document.getElementById('modal');
+let dlg = null; // {onSave, onDelete}
+function openDialog(title, bodyHTML, onSave, onDelete){
+  document.getElementById('dlgTitle').textContent = title;
+  document.getElementById('dlgBody').innerHTML = bodyHTML;
+  const del = document.getElementById('dlgDelete'); del.hidden = !onDelete;
+  dlg = {onSave, onDelete};
+  modal.classList.add('on');
+  const first = modal.querySelector('input,textarea,select'); if(first) first.focus();
+}
+function closeDialog(){ modal.classList.remove('on'); dlg=null; }
+document.getElementById('dlgCancel').onclick = closeDialog;
+document.getElementById('dlgSave').onclick = ()=>{ if(dlg && dlg.onSave()!==false){ closeDialog(); } };
+document.getElementById('dlgDelete').onclick = ()=>{ if(dlg && dlg.onDelete && confirm('삭제할까요?')){ dlg.onDelete(); closeDialog(); } };
+modal.addEventListener('click', e=>{ if(e.target===modal) closeDialog(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('on')) closeDialog(); });
+const $v = id => document.getElementById(id).value.trim();
+const optHTML = (arr, sel) => arr.map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
+
+function todoDialog(t){
+  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:''};
+  openDialog(isNew?'할 일 추가':'할 일 수정', `
+    <div class="f"><label for="f_name">이름</label><textarea id="f_name" rows="2">${esc(t.name)}</textarea></div>
+    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status">${optHTML(DB.options.status,t.status)}</select></div>
+    <div class="f"><label for="f_date">일자</label><input type="date" id="f_date" value="${t.date||''}"></div></div>
+    <div class="f"><label>태그</label><div class="tagrow">${DB.options.tags.map(x=>`<label><input type="checkbox" name="f_tag" value="${esc(x)}" ${(t.tags||[]).includes(x)?'checked':''}> ${esc(x)}</label>`).join('')}</div></div>
+    <div class="f"><label for="f_proj">관련 프로젝트</label><select id="f_proj"><option value="">(없음)</option>${DB.projects.map(p=>`<option value="${p.id}" ${p.id===t.project?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`,
+    ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
+      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value)};
+      if(isNew) DB.todos.push(obj); else Object.assign(DB.todos.find(x=>x.id===t.id), obj); save(); },
+    isNew?null:()=>{ DB.todos = DB.todos.filter(x=>x.id!==t.id); save(); });
+}
+function projectDialog(p){
+  const isNew = !p; p = p || {name:'',related:'',status:'진행',date:'',memo:''};
+  openDialog(isNew?'프로젝트 추가':'프로젝트 수정', `
+    <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(p.name)}"></div>
+    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status">${optHTML(DB.options.status,p.status)}</select></div>
+    <div class="f"><label for="f_rel">연관</label><select id="f_rel"><option value="">(없음)</option>${optHTML(DB.options.related,p.related)}</select></div></div>
+    <div class="f"><label for="f_date">일자 (시작/마감)</label><input type="date" id="f_date" value="${p.date||''}"></div>
+    <div class="f"><label for="f_memo">비고</label><textarea id="f_memo">${esc(p.memo)}</textarea></div>`,
+    ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
+      const obj={id:p.id||uid(), name, status:$v('f_status'), related:$v('f_rel'), date:$v('f_date'), memo:$v('f_memo')};
+      if(isNew) DB.projects.push(obj); else Object.assign(DB.projects.find(x=>x.id===p.id), obj); save(); },
+    isNew?null:()=>{ DB.projects = DB.projects.filter(x=>x.id!==p.id); DB.todos.forEach(t=>{ if(t.project===p.id) t.project=''; }); save(); });
+}
+function noteDialog(n){
+  const isNew = !n; n = n || {title:'',body:''};
+  openDialog(isNew?'메모 추가':'메모 수정', `
+    <div class="f"><label for="f_title">제목</label><input type="text" id="f_title" value="${esc(n.title)}"></div>
+    <div class="f"><label for="f_body">내용</label><textarea id="f_body" style="min-height:160px">${esc(n.body)}</textarea></div>`,
+    ()=>{ const title=$v('f_title'); if(!title){ alert('제목을 입력하세요'); return false; }
+      const obj={id:n.id||uid(), title, body:document.getElementById('f_body').value.trim()};
+      if(isNew) DB.notes.push(obj); else Object.assign(DB.notes.find(x=>x.id===n.id), obj); save(); },
+    isNew?null:()=>{ DB.notes = DB.notes.filter(x=>x.id!==n.id); save(); });
+}
+function optionsDialog(){
+  const sec = (key,label) => `<div class="f"><label>${label}</label><div class="opt-list" data-key="${key}">${DB.options[key].map(o=>`<span class="chip rel">${esc(o)} <button data-act="rmopt" data-key="${key}" data-val="${esc(o)}" aria-label="삭제">✕</button></span>`).join('')}</div>
+    <div style="display:flex;gap:6px"><input type="text" id="opt_${key}" placeholder="새 항목" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:6px 10px"><button class="btn sm" data-act="addopt" data-key="${key}">추가</button></div></div>`;
+  openDialog('옵션 관리', sec('related','연관 (업체/업무 종류)') + sec('status','상태 (To do / Projects)') + sec('tags','태그') + sec('calStatus','캘린더 일정 상태') + `<div class="f hint">상태는 대기·보류 → 진행·검토 → 완료·취소·없음 순으로 정렬되며, 완료/취소/없음은 완료 그룹으로 처리됩니다.</div>`,
+    ()=>{ save(); });
+}
+document.getElementById('dlgBody').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-act]'); if(!b) return;
+  const key = b.dataset.key;
+  if(b.dataset.act==='addopt'){ const v=$v('opt_'+key); if(v && !DB.options[key].includes(v)){ DB.options[key].push(v); optionsDialog(); } }
+  if(b.dataset.act==='rmopt'){ DB.options[key] = DB.options[key].filter(x=>x!==b.dataset.val); optionsDialog(); }
+});
+
+// ================== 이벤트 ==================
+document.querySelector('.top nav').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-view]'); if(!b) return;
+  document.querySelectorAll('.top nav button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id==='view-'+b.dataset.view));
+  try{ localStorage.setItem(KEY+':view', b.dataset.view); }catch(e){}
+});
+document.getElementById('addTodo').onclick = ()=>todoDialog();
+document.getElementById('addProject').onclick = ()=>projectDialog();
+document.getElementById('addNote').onclick = ()=>noteDialog();
+document.getElementById('btnOptions').onclick = optionsDialog;
+document.getElementById('todoShowDone').onchange = renderTodos;
+document.getElementById('todoFilterProject').onchange = renderTodos;
+document.getElementById('projFilter').onchange = renderProjects;
+document.getElementById('jSearch').oninput = renderMonths;
+
+document.getElementById('todoList').addEventListener('click', handleTodoClick);
+document.getElementById('projList').addEventListener('click', e=>{
+  const card = e.target.closest('.card'); if(!card) return;
+  const p = DB.projects.find(x=>x.id===card.dataset.id);
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  if(b.closest('.todo')){ handleTodoClick(e); return; }
+  if(b.dataset.act==='edit') projectDialog(p);
+  if(b.dataset.act==='addsub'){ todoDialog(); document.getElementById('f_proj').value = p.id; }
+});
+function handleTodoClick(e){
+  const row = e.target.closest('.todo'); if(!row) return;
+  const t = DB.todos.find(x=>x.id===row.dataset.id);
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  if(b.dataset.act==='toggle'){ t.status = b.checked ? '완료' : '대기'; save(); }
+  if(b.dataset.act==='edit') todoDialog(t);
+}
+document.getElementById('noteList').addEventListener('click', e=>{
+  const n = e.target.closest('.note'); if(!n) return;
+  if(e.target.closest('[data-act=edit]')) noteDialog(DB.notes.find(x=>x.id===n.dataset.id));
+});
+
+// 업무일지
+function ensureMonth(key){ let m = DB.months.find(x=>x.key===key); if(!m){ m={key, entries:[]}; DB.months.push(m); } return m; }
+function addEntry(date){
+  if(!date) return;
+  const m = ensureMonth(date.slice(0,7));
+  let e = m.entries.find(x=>x.date===date);
+  if(!e){ e={id:uid(), date, log:'', memo:''}; m.entries.push(e); openMonths.add(m.key); save(); toast(`${date} 추가됨`); }
+  else { openMonths.add(m.key); render(); toast('이미 있는 날짜입니다'); }
+  setTimeout(()=>{ const td=document.querySelector(`tr[data-id="${e.id}"] .log`); if(td){ td.scrollIntoView({block:'center'}); td.focus(); } },50);
+}
+document.getElementById('addToday').onclick = ()=>{ document.querySelector('[data-view=journal]').click(); addEntry(todayStr()); };
+document.getElementById('addMonth').onclick = ()=>{
+  const v = prompt('추가할 월 (YYYY-MM)', todayStr().slice(0,7)); if(!v) return;
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(v)){ alert('형식: 2026-10'); return; }
+  if(DB.months.find(x=>x.key===v)){ toast('이미 있는 월입니다'); return; }
+  ensureMonth(v); openMonths.add(v); save();
+};
+document.getElementById('toggleAll').onclick = function(){
+  const all = [...document.querySelectorAll('.month')];
+  const anyOpen = all.some(d=>d.open);
+  all.forEach(d=>{ d.open=!anyOpen; if(anyOpen) openMonths.delete(d.dataset.key); else openMonths.add(d.dataset.key); });
+  this.textContent = anyOpen ? '모두 펼치기' : '모두 접기';
+};
+const monthsBox = document.getElementById('months');
+monthsBox.addEventListener('toggle', e=>{ const d=e.target; if(d.classList.contains('month')){ if(d.open) openMonths.add(d.dataset.key); else openMonths.delete(d.dataset.key); } }, true);
+monthsBox.addEventListener('click', e=>{
+  const b = e.target.closest('button[data-act]'); if(!b) return;
+  const det = b.closest('.month'); const m = DB.months.find(x=>x.key===det.dataset.key);
+  if(b.dataset.act==='addentry'){ addEntry(det.querySelector('[data-f=newdate]').value); }
+  if(b.dataset.act==='delentry'){ const tr=b.closest('tr'); const en=m.entries.find(x=>x.id===tr.dataset.id); if(confirm(`${en.date} 기록을 삭제할까요?`)){ m.entries=m.entries.filter(x=>x.id!==en.id); save(); } }
+  if(b.dataset.act==='delmonth'){ e.preventDefault(); if(confirm(`${m.key} 전체(${m.entries.length}일)를 삭제할까요?`)){ DB.months=DB.months.filter(x=>x.key!==m.key); save(); } }
+});
+// 인라인 편집: 포커스 시 원문 표시, 블러 시 저장
+monthsBox.addEventListener('focusin', e=>{
+  const td = e.target.closest('td[data-f]'); if(!td) return;
+  const en = findEntry(td.closest('tr').dataset.id); td.textContent = en[td.dataset.f];
+  // 커서를 끝으로 이동
+  const r=document.createRange(); r.selectNodeContents(td); r.collapse(false); const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+});
+monthsBox.addEventListener('focusout', e=>{
+  const td = e.target.closest('td[data-f]'); if(!td) return;
+  const en = findEntry(td.closest('tr').dataset.id); const v = td.innerText.replace(/\n{3,}/g,'\n\n').trim();
+  if(v!==en[td.dataset.f]){ en[td.dataset.f]=v; DB.updatedAt=new Date().toISOString(); try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(_){} toast('저장됨'); schedulePush(); }
+  td.innerHTML = fmtLog(en[td.dataset.f], document.getElementById('jSearch').value.trim());
+  renderStats();
+});
+function findEntry(id){ for(const m of DB.months){ const e=m.entries.find(x=>x.id===id); if(e) return e; } }
+
+// ================== 캘린더 & 리스트 (todolist 2.) ==================
+let calYM = todayStr().slice(0,7);
+let calDoneMode = 'open', boardGroupBy = 'quad';
+const QUADS = ['작업중','대기','반영대기','추후작업'];
+const QUAD_MIGRATE = {'디자인~ing':'작업중','퍼블리싱 완료 후 검토 중':'반영대기'};
+const STATUS_COLOR = {'우선순위 1':'red','우선순위 2':'orange','추후업무':'yellow','분류대기':'gray','업무보류':'gray','회의':'purple','제작완료':'blue','컨펌전':'brown','fixed':'pink','사업검수중':'green','반영대기':'purple','반영완료':'yellow'};
+const stColor = s => STATUS_COLOR[s] || 'gray';
+function calFilter(list){
+  const q = document.getElementById('calSearch').value.trim().toLowerCase();
+  return list.filter(c => (calDoneMode==='all' || (calDoneMode==='done') === !!c.done) && (!q || (c.name+' '+(c.notes||[]).join(' ')).toLowerCase().includes(q)));
+}
+function inRange(c, d){ if(!c.start) return false; const e = c.end || c.start; return c.start <= d && d <= e; }
+function renderCal(){
+  const [y,m] = calYM.split('-').map(Number);
+  document.getElementById('calTitle').textContent = `${y}.${String(m).padStart(2,'0')}`;
+  const first = new Date(y, m-1, 1); const startDow = first.getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const t = todayStr();
+  const items = calFilter(DB.cal);
+  let html = DOW.map(d=>`<div class="dh">${d}</div>`).join('');
+  const total = Math.ceil((startDow + daysInMonth)/7)*7;
+  for(let i=0;i<total;i++){
+    const dayNum = i - startDow + 1;
+    const d = new Date(y, m-1, dayNum);
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const other = dayNum<1 || dayNum>daysInMonth;
+    const evs = items.filter(c=>inRange(c, ds)).sort((a,b)=>(a.status||'~').localeCompare(b.status||'~'));
+    const shown = evs.slice(0,4);
+    html += `<div class="cell ${other?'other':''} ${ds===t?'today':''} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''}" data-date="${ds}">
+      <span class="dn">${d.getDate()}</span>
+      ${shown.map(c=>`<span class="ev ${c.done?'done':''} ${c.status?'c-'+stColor(c.status):'off'}" data-id="${c.id}" title="${esc(c.name)}${c.status?' · '+esc(c.status):''}">${c.time?'<b>'+esc(c.time)+'</b> ':''}${esc(c.name)}</span>`).join('')}
+      ${evs.length>4?`<span class="more">+${evs.length-4}개 더</span>`:''}
+    </div>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+  renderBoard(items);
+}
+function renderBoard(items){
+  const monthOnly = document.getElementById('boardMonthOnly').checked;
+  let list = items.filter(c => !monthOnly || (c.start && c.start.slice(0,7)===calYM));
+  const key = 'quad';
+  const groups = {}; QUADS.forEach(q=>groups[q]=[]);
+  list.forEach(c=>{ const g = c.quad; if(groups[g]) groups[g].push(c); });
+  const keys = QUADS;
+  document.getElementById('boardCnt').textContent = `${keys.reduce((n,k)=>n+groups[k].length,0)}건`;
+  renderHours(list);
+  document.getElementById('board').innerHTML = keys.map(g=>`<div class="bcol" data-group="${esc(g)}"><h4><span class="chip q">${esc(g)}</span><span class="cnt">${groups[g].length}</span></h4>
+    ${groups[g].sort((a,b)=>(a.start||'9').localeCompare(b.start||'9')).map(c=>`<div class="bcard ${c.done?'done':''}" data-id="${c.id}" draggable="true">
+      <div class="t">${esc(c.name)}</div>
+      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}</div>
+      ${(c.notes||[]).length?`<div class="n">${c.notes.map(n=>fmtNote(n)).join('<br>')}</div>`:''}
+    </div>`).join('') || '<div class="empty" style="padding:14px 6px">비어 있음</div>'}</div>`).join('');
+}
+const fmtH = h => Math.round(h).toLocaleString('ko-KR') + 'h';
+const fmtMD = h => (Math.round(h*0.125*1000)/1000).toLocaleString('ko-KR');
+function renderHours(list){
+  const rows = list.filter(c=>c.quad && QUADS.includes(c.quad)).sort((a,b)=>(a.start||'9').localeCompare(b.start||'9'));
+  const total = rows.reduce((n,c)=>n+(c.hours||0),0);
+  const filled = rows.filter(c=>c.hours!=null).length;
+  document.getElementById('hoursCnt').textContent = `${rows.length}건 · 작업시간 입력 ${filled}건`;
+  document.getElementById('hoursBody').innerHTML = rows.length ? rows.map(c=>`<tr data-id="${c.id}" class="${c.done?'done':''}">
+      <td class="d">${c.start?c.start.slice(5).replace('-','.'):'-'}</td>
+      <td class="nm">${esc(c.name)}${c.status?` <span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}</td>
+      <td class="q"><span class="chip q">${esc(c.quad)}</span></td>
+      <td class="h"><input type="number" min="0" step="1" value="${c.hours??''}" data-f="hours" aria-label="작업시간" placeholder="0"></td>
+      <td class="md">${c.hours!=null?fmtMD(c.hours):'-'}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">표시할 업무가 없습니다</td></tr>';
+  document.getElementById('hoursTotal').innerHTML = `<td></td><td>Total</td><td></td><td class="h"><b>${fmtH(total)}</b></td><td class="md"><b>${fmtMD(total)} MD</b></td>`;
+}
+function fmtNote(n){
+  let h = esc(n).replace(/~~(.+?)~~/g,'<s>$1</s>');
+  h = h.replace(/(https?:\/\/[^\s<]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener">${u.replace(/^https?:\/\//,'').slice(0,42)}${u.length>50?'…':''}</a>`);
+  return h;
+}
+function calDialog(c, presetDate){
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
+  openDialog(isNew?'일정 추가':'일정 수정', `
+    <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
+    <div class="fs"><div class="f"><label for="f_start">마감일 (시작)</label><input type="date" id="f_start" value="${c.start||''}"></div>
+    <div class="f"><label for="f_end">종료일 (기간일 때만)</label><input type="date" id="f_end" value="${c.end||''}"></div></div>
+    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div>
+    <div class="f"><label for="f_quad">4분면 시간 관리법</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div></div>
+    <div class="fs"><div class="f"><label for="f_time">시간</label><input type="text" id="f_time" value="${esc(c.time)}" placeholder="예: 10:30 ~"></div>
+    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
+    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" style="min-height:110px">${esc((c.notes||[]).join('\n'))}</textarea></div>
+    <div class="f"><label class="chk"><input type="checkbox" id="f_done" ${c.done?'checked':''}> 완료</label></div>`,
+    ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
+      const start=$v('f_start'), end=$v('f_end');
+      if(end && start && end<start){ alert('종료일이 시작일보다 빠릅니다'); return false; }
+      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:(end&&end!==start)?end:'', status:$v('f_status'), quad:$v('f_quad'), time:$v('f_time'), hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
+        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked };
+      if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
+      if(start) calYM = start.slice(0,7); save(); },
+    isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); });
+}
+function shiftMonth(n){ const [y,m]=calYM.split('-').map(Number); const d=new Date(y, m-1+n, 1); calYM=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; renderCal(); }
+document.getElementById('calPrev').onclick = ()=>shiftMonth(-1);
+document.getElementById('calNext').onclick = ()=>shiftMonth(1);
+document.getElementById('calToday').onclick = ()=>{ calYM = todayStr().slice(0,7); renderCal(); };
+document.getElementById('calSearch').oninput = renderCal;
+document.getElementById('boardMonthOnly').onchange = renderCal;
+document.getElementById('addCal').onclick = ()=>calDialog(null, todayStr());
+document.getElementById('calDone').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; calDoneMode=b.dataset.v; [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b)); renderCal(); });
+document.getElementById('calGrid').addEventListener('click', e=>{
+  const ev = e.target.closest('.ev'); if(ev){ calDialog(DB.cal.find(x=>x.id===ev.dataset.id)); return; }
+  const cell = e.target.closest('.cell'); if(cell) calDialog(null, cell.dataset.date);
+});
+// 드래그앤드롭으로 그룹 이동
+const boardEl = document.getElementById('board');
+let dragId = null;
+boardEl.addEventListener('dragstart', e=>{ const b=e.target.closest('.bcard'); if(!b) return; dragId=b.dataset.id; b.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', dragId); });
+boardEl.addEventListener('dragend', e=>{ const b=e.target.closest('.bcard'); if(b) b.classList.remove('dragging'); boardEl.querySelectorAll('.bcol.over').forEach(x=>x.classList.remove('over')); dragId=null; });
+boardEl.addEventListener('dragover', e=>{ const col=e.target.closest('.bcol'); if(!col||!dragId) return; e.preventDefault(); e.dataTransfer.dropEffect='move'; boardEl.querySelectorAll('.bcol.over').forEach(x=>{ if(x!==col) x.classList.remove('over'); }); col.classList.add('over'); });
+boardEl.addEventListener('dragleave', e=>{ const col=e.target.closest('.bcol'); if(col && !col.contains(e.relatedTarget)) col.classList.remove('over'); });
+boardEl.addEventListener('drop', e=>{
+  const col=e.target.closest('.bcol'); if(!col||!dragId) return; e.preventDefault();
+  const c = DB.cal.find(x=>x.id===dragId); const g = col.dataset.group; if(!c) return;
+  if(c.quad!==g){ c.quad=g; save(); toast(`"${c.name.slice(0,20)}" → ${g}`); }
+});
+boardEl.addEventListener('click', e=>{ if(e.target.closest('a')) return; const b=e.target.closest('.bcard'); if(b) calDialog(DB.cal.find(x=>x.id===b.dataset.id)); });
+
+document.getElementById('hoursTable').addEventListener('change', e=>{
+  const inp=e.target.closest('input[data-f=hours]'); if(!inp) return;
+  const c=DB.cal.find(x=>x.id===inp.closest('tr').dataset.id); if(!c) return;
+  c.hours = inp.value==='' ? null : Math.max(0, Math.round(Number(inp.value))); save();
+});
+document.getElementById('hoursTable').addEventListener('click', e=>{ if(e.target.closest('input')) return; const tr=e.target.closest('tr[data-id]'); if(tr) calDialog(DB.cal.find(x=>x.id===tr.dataset.id)); });
+
+// 내보내기 / 가져오기 / 초기화
+document.getElementById('btnExport').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`the51x-업무관리_${todayStr()}.json`; a.click(); URL.revokeObjectURL(a.href);
+  toast('JSON 파일로 내보냈습니다');
+};
+document.getElementById('btnImport').onclick = ()=>document.getElementById('fileImport').click();
+document.getElementById('fileImport').onchange = function(){
+  const f=this.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!d.months||!d.todos||!d.projects) throw 0; DB=d; migrate();
+    if(confirm('현재 데이터를 불러온 파일로 교체할까요?')){ openMonths=null; save(); toast('가져오기 완료'); } else { load(); } }catch(e){ alert('올바른 백업 파일이 아닙니다'); } };
+  r.readAsText(f); this.value='';
+};
+document.getElementById('btnReset').onclick = ()=>{ if(confirm('모든 변경사항을 지우고 Notion 초기 데이터로 되돌릴까요?\n(먼저 내보내기로 백업하는 것을 권장합니다)')){ DB=JSON.parse(JSON.stringify(SEED)); openMonths=null; save(); } };
+
+let toastT; function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),1600); }
+
+// ================== GitHub 동기화 ==================
+const SYNC_KEY = KEY+':sync';
+function syncCfg(){ try{ return Object.assign({owner:'g1azed', repo:'the51x-work', branch:'main', path:'data/data.json', token:''}, JSON.parse(localStorage.getItem(SYNC_KEY)||'{}')); }catch(e){ return {owner:'g1azed', repo:'the51x-work', branch:'main', path:'data/data.json', token:''}; } }
+let syncState = { status:'off', sha:null, msg:'', timer:null, pushing:false, dirty:false };
+function setSync(status, msg){ syncState.status=status; syncState.msg=msg||''; const el=document.getElementById('syncBtn'); if(!el) return;
+  const map={off:['⚪','동기화 미설정'], ok:['🟢','동기화됨'], busy:['🟡','동기화 중…'], err:['🔴','동기화 오류'], offline:['⚪','오프라인(로컬 저장)']};
+  const [dot,label]=map[status]||map.off; el.innerHTML=`${dot} <span>${label}</span>`; el.title = msg || label; }
+const b64enc = str => btoa(Array.from(new TextEncoder().encode(str), b=>String.fromCharCode(b)).join(''));
+const b64dec = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g,'')), c=>c.charCodeAt(0)));
+async function ghFetch(cfg, method='GET', body=null, extraPath=''){
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path}${extraPath}${method==='GET'?`?ref=${encodeURIComponent(cfg.branch)}&t=${Date.now()}`:''}`;
+  const r = await fetch(url, { method, headers:{ 'Authorization':`Bearer ${cfg.token}`, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28', ...(body?{'Content-Type':'application/json'}:{}) }, body: body?JSON.stringify(body):null });
+  if(r.status===404) return {notFound:true, status:404};
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(`${r.status} ${data.message||''}`);
+  return data;
+}
+async function pullRemote(silent=false){
+  const cfg=syncCfg(); if(!cfg.token) { setSync('off'); return false; }
+  setSync('busy');
+  try{
+    const res = await ghFetch(cfg);
+    if(res.notFound){ syncState.sha=null; setSync('ok','원격에 data.json 없음 — 첫 저장 시 생성'); return false; }
+    syncState.sha = res.sha;
+    const remote = JSON.parse(b64dec(res.content));
+    const localTime = DB.updatedAt||'', remoteTime = remote.updatedAt||'';
+    if(remoteTime >= localTime){ DB = remote; migrate(); try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(_){} openMonths=null; render(); setSync('ok', `마지막 동기화 ${new Date().toLocaleTimeString('ko-KR')}`); if(!silent) toast('GitHub에서 불러왔습니다'); }
+    else { setSync('ok','로컬이 더 최신 — 업로드'); await pushRemote(); }
+    return true;
+  }catch(e){ setSync('err', String(e.message)); if(!silent) toast('불러오기 실패: '+e.message); return false; }
+}
+async function pushRemote(){
+  const cfg=syncCfg(); if(!cfg.token) return false;
+  if(syncState.pushing){ syncState.dirty=true; return; }
+  syncState.pushing=true; setSync('busy');
+  try{
+    const body = { message:`update data ${DB.updatedAt||''}`, content:b64enc(JSON.stringify(DB,null,1)), branch:cfg.branch };
+    if(syncState.sha) body.sha = syncState.sha;
+    let res;
+    try{ res = await ghFetch(cfg,'PUT',body); }
+    catch(e){ if(/^(409|422)/.test(e.message)){ const cur=await ghFetch(cfg); if(!cur.notFound){ body.sha=cur.sha; } else delete body.sha; res = await ghFetch(cfg,'PUT',body); } else throw e; }
+    syncState.sha = res.content && res.content.sha;
+    setSync('ok', `마지막 동기화 ${new Date().toLocaleTimeString('ko-KR')}`);
+  }catch(e){ setSync('err', String(e.message)); toast('GitHub 저장 실패: '+e.message); }
+  finally{ syncState.pushing=false; if(syncState.dirty){ syncState.dirty=false; pushRemote(); } }
+}
+function schedulePush(){ const cfg=syncCfg(); if(!cfg.token) return; clearTimeout(syncState.timer); setSync('busy'); syncState.timer=setTimeout(pushRemote, 1500); }
+window.addEventListener('beforeunload', e=>{ if(syncState.status==='busy'){ e.preventDefault(); e.returnValue=''; } });
+function syncDialog(){
+  const c=syncCfg();
+  openDialog('GitHub 동기화 설정', `
+    <div class="f hint" style="padding-top:10px">데이터(data.json)를 GitHub 저장소에 자동 저장합니다. 변경 후 1.5초 뒤 커밋되고, 열 때마다 저장소에서 최신 데이터를 불러옵니다.</div>
+    <div class="fs"><div class="f"><label for="s_owner">GitHub 사용자</label><input type="text" id="s_owner" value="${esc(c.owner)}"></div>
+    <div class="f"><label for="s_repo">저장소</label><input type="text" id="s_repo" value="${esc(c.repo)}"></div></div>
+    <div class="fs"><div class="f"><label for="s_branch">브랜치</label><input type="text" id="s_branch" value="${esc(c.branch)}"></div>
+    <div class="f"><label for="s_path">데이터 파일 경로</label><input type="text" id="s_path" value="${esc(c.path)}"></div></div>
+    <div class="f"><label for="s_token">Personal Access Token</label><input type="password" id="s_token" value="${esc(c.token)}" placeholder="github_pat_…" autocomplete="off">
+      <div class="hint">GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate new token<br>· Repository access: <b>Only select repositories → ${esc(c.repo)}</b><br>· Permissions → Repository permissions → <b>Contents: Read and write</b><br>토큰은 이 브라우저(localStorage)에만 저장되고 GitHub API 호출에만 사용됩니다.</div></div>
+    <div class="f" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="s_test" type="button">연결 테스트</button><button class="btn sm" id="s_pull" type="button">⬇ 지금 불러오기</button><button class="btn sm" id="s_push" type="button">⬆ 지금 저장</button><span id="s_msg" class="hint" style="align-self:center"></span></div>`,
+    ()=>{ localStorage.setItem(SYNC_KEY, JSON.stringify({owner:$v('s_owner'), repo:$v('s_repo'), branch:$v('s_branch')||'main', path:$v('s_path')||'data/data.json', token:$v('s_token')})); syncState.sha=null; pullRemote(); });
+  const saveCfg = ()=>{ localStorage.setItem(SYNC_KEY, JSON.stringify({owner:$v('s_owner'), repo:$v('s_repo'), branch:$v('s_branch')||'main', path:$v('s_path')||'data/data.json', token:$v('s_token')})); };
+  const msg = t => document.getElementById('s_msg').textContent = t;
+  document.getElementById('s_test').onclick = async ()=>{ saveCfg(); msg('확인 중…'); try{ const r=await ghFetch(syncCfg()); msg(r.notFound?'연결 OK — data.json은 아직 없음(첫 저장 시 생성)':'연결 OK — data.json 확인됨'); }catch(e){ msg('실패: '+e.message); } };
+  document.getElementById('s_pull').onclick = async ()=>{ saveCfg(); syncState.sha=null; msg('불러오는 중…'); const ok=await pullRemote(); msg(ok?'불러오기 완료':'불러올 데이터가 없거나 실패: '+syncState.msg); };
+  document.getElementById('s_push').onclick = async ()=>{ saveCfg(); msg('저장 중…'); if(!syncState.sha){ try{ const r=await ghFetch(syncCfg()); if(!r.notFound) syncState.sha=r.sha; }catch(e){} } await pushRemote(); msg(syncState.status==='ok'?'저장 완료':'실패: '+syncState.msg); };
+}
+document.getElementById('syncBtn').onclick = syncDialog;
+
+// 시작
+load();
+try{ const v=localStorage.getItem(KEY+':view'); if(v){ const b=document.querySelector(`[data-view=${v}]`); if(b) b.click(); } }catch(e){}
+render();
+setSync(syncCfg().token?'busy':'off');
+if(syncCfg().token) pullRemote(true);
+</script>
+</body>
+</html>
