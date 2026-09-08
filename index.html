@@ -172,6 +172,8 @@ table.j tr:hover .ops .btn{opacity:1}
 .cell .ev.c-blue{background:var(--blue-soft);color:var(--blue);border-left-color:var(--blue)}
 .cell .ev.c-pink{background:#fbe6f0;color:#b8347a;border-left-color:#d64d97}
 .cell .more{font-size:11px;color:var(--muted);padding-left:4px}
+.cell .ev.dragging{opacity:.4;cursor:grabbing}
+.cell.over{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:-2px}
 .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 @media (max-width:900px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .bcol{background:#f0f3f6;border-radius:10px;padding:8px;min-height:80px}
@@ -477,9 +479,8 @@ https://www.lguplus.com/static/partners/cx/event/88888/20260529_test.png`) },
   ]
 };
 // ===== 업무일지 / 캘린더 시드 헬퍼 =====
-SEED.options.calStatus = ['우선순위 1','우선순위 2','추후업무','분류대기','업무보류','회의','제작완료','컨펌전','fixed','사업검수중','반영대기','반영완료'];
+SEED.options.calStatus = ['우선순위 1','우선순위 2','추후업무','분류대기','업무보류','제작완료','fixed','사업검수중','반영대기','반영완료'];
 SEED.options.quad = ['작업중','디자인~ing','퍼블리싱 완료 후 검토 중','반영대기','대기','추후작업'];
-SEED.options.who = ['대표님','백민경 사원','고정연 선임님'];
 SEED.cal = [];
 const M = SEED.months;
 function E(date, log, memo){ return { id:'j'+date.replace(/-/g,''), date, log:clean(log||''), memo:clean(memo||'') }; }
@@ -1540,7 +1541,7 @@ function renderCal(){
     const shown = evs.slice(0,4);
     html += `<div class="cell ${other?'other':''} ${ds===t?'today':''} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''}" data-date="${ds}">
       <span class="dn">${d.getDate()}</span>
-      ${shown.map(c=>`<span class="ev ${c.done?'done':''} ${c.status?'c-'+stColor(c.status):'off'}" data-id="${c.id}" title="${esc(c.name)}${c.status?' · '+esc(c.status):''}">${c.time?'<b>'+esc(c.time)+'</b> ':''}${esc(c.name)}</span>`).join('')}
+      ${shown.map(c=>`<span class="ev ${c.done?'done':''} ${c.status?'c-'+stColor(c.status):'off'}" data-id="${c.id}" draggable="true" title="${esc(c.name)}${c.status?' · '+esc(c.status):''}">${c.time?'<b>'+esc(c.time)+'</b> ':''}${esc(c.name)}</span>`).join('')}
       ${evs.length>4?`<span class="more">+${evs.length-4}개 더</span>`:''}
     </div>`;
   }
@@ -1630,6 +1631,61 @@ boardEl.addEventListener('drop', e=>{
   if(c.quad!==g){ c.quad=g; save(); toast(`"${c.name.slice(0,20)}" → ${g}`); }
 });
 boardEl.addEventListener('click', e=>{ if(e.target.closest('a')) return; const b=e.target.closest('.bcard'); if(b) calDialog(DB.cal.find(x=>x.id===b.dataset.id)); });
+
+// 캘린더 그리드 드래그앤드롭 — 날짜 변경 (2026-09-08 추가)
+const calGridEl = document.getElementById('calGrid');
+let calDragId = null;
+calGridEl.addEventListener('dragstart', e=>{
+  const ev = e.target.closest('.ev');
+  if(!ev) return;
+  calDragId = ev.dataset.id;
+  ev.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', calDragId);
+});
+calGridEl.addEventListener('dragend', e=>{
+  const ev = e.target.closest('.ev');
+  if(ev) ev.classList.remove('dragging');
+  calGridEl.querySelectorAll('.cell.over').forEach(x => x.classList.remove('over'));
+  calDragId = null;
+});
+calGridEl.addEventListener('dragover', e=>{
+  if(!calDragId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const cell = e.target.closest('.cell');
+  if(!cell) return;
+  calGridEl.querySelectorAll('.cell.over').forEach(x => { if(x !== cell) x.classList.remove('over'); });
+  cell.classList.add('over');
+});
+calGridEl.addEventListener('dragleave', e=>{
+  if(!calDragId) return;
+  const cell = e.target.closest('.cell');
+  if(cell && !cell.contains(e.relatedTarget)) cell.classList.remove('over');
+});
+calGridEl.addEventListener('drop', e=>{
+  const cell = e.target.closest('.cell');
+  if(!cell || !calDragId) return;
+  e.preventDefault();
+  const c = DB.cal.find(x => x.id === calDragId);
+  if(!c) return;
+  const newDate = cell.dataset.date;
+  const originalStart = c.start;
+  if(c.start){
+    const days = c.end ? Math.floor((new Date(c.end) - new Date(c.start)) / 86400000) : 0;
+    c.start = newDate;
+    if(c.end && days > 0){
+      const endDate = new Date(newDate);
+      endDate.setDate(endDate.getDate() + days);
+      c.end = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`;
+    }
+  } else {
+    c.start = newDate;
+  }
+  calYM = newDate.slice(0,7);
+  save();
+  toast(`"${c.name.slice(0,20)}" → ${newDate}`);
+});
 
 document.getElementById('hoursTable').addEventListener('change', e=>{
   const inp=e.target.closest('input[data-f=hours]'); if(!inp) return;
