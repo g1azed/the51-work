@@ -1,5 +1,8 @@
 # 🌊 더피프티원엑스 업무관리
 
+
+ https://g1azed.github.io/the51-work/
+
 노션의 "더피프티원엑스 업무관리" 페이지를 단일 HTML 앱으로 옮긴 프로젝트입니다.
 서버 없이 `index.html` 하나로 동작하며, 데이터는 이 저장소의 `data/data.json`에 자동 저장됩니다.
 
