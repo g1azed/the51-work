@@ -156,6 +156,7 @@ function openDialog(title, bodyHTML, onSave, onDelete, position='right'){
   modal.classList.toggle('center', position==='center');
   modal.classList.toggle('right', position!=='center');
   modal.classList.add('on');
+  if(position==='center') document.getElementById('overlay').classList.add('on');
   const first = modal.querySelector('input,textarea,select'); if(first) first.focus();
 }
 function closeDialog(shouldSave=true){
@@ -163,6 +164,7 @@ function closeDialog(shouldSave=true){
     if(dlg.onSave()===false) return;
   }
   modal.classList.remove('on');
+  document.getElementById('overlay').classList.remove('on');
   dlg=null;
 }
 document.getElementById('dlgCancel').onclick = ()=>closeDialog(false);
