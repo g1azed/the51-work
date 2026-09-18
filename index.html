@@ -222,17 +222,23 @@ table.hours tfoot td.md{color:var(--accent-ink)}
 .chip.hrs{background:#e8f4ec;color:#2f7a4a}
 
 /* modal */
-.modal{position:fixed;inset:0;background:rgba(20,30,40,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal{position:fixed;background:#fff;display:none;flex-direction:column;z-index:50}
 .modal.on{display:flex}
-.dlg{background:#fff;border-radius:14px;width:min(560px,100%);max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
-.dlg h3{margin:0;padding:16px 20px;border-bottom:1px solid var(--line);font-size:15px}
-.dlg .f{padding:6px 20px}
+.modal.right{top:0;right:0;bottom:0;width:min(480px,90%);box-shadow:-2px 0 12px rgba(20,40,60,.15)}
+.modal.center{top:50%;left:50%;transform:translate(-50%,-50%);width:min(600px,90%);max-height:90vh;border-radius:12px;box-shadow:0 8px 24px rgba(20,40,60,.25)}
+.modal::before{content:'';position:fixed;z-index:-1}
+.modal.right::before{inset:0;right:auto;width:calc(100vw - min(480px,90%));background:rgba(20,30,40,.3)}
+.modal.center::before{inset:0;background:rgba(0,0,0,.6)}
+.dlg{display:flex;flex-direction:column;height:100%;background:#fff}
+.dlg h3{margin:0;padding:16px 20px;border-bottom:1px solid var(--line);font-size:15px;flex-shrink:0}
+.dlg>div:not(h3):not(.foot){flex:1;overflow-y:auto;padding:20px}
+.dlg .f{padding:6px 0}
 .dlg .f label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
 .dlg .f input[type=text],.dlg .f input[type=date],.dlg .f select,.dlg .f textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
 .dlg .f textarea{min-height:90px;resize:vertical}
 .dlg .f .tagrow{display:flex;gap:10px;flex-wrap:wrap}
 .dlg .f .tagrow label{display:inline-flex;align-items:center;gap:4px;font-weight:500;color:var(--text);margin:0}
-.dlg .foot{display:flex;gap:6px;padding:14px 20px;border-top:1px solid var(--line);justify-content:flex-end}
+.dlg .foot{display:flex;gap:6px;padding:14px 20px;border-top:1px solid var(--line);justify-content:flex-end;flex-shrink:0}
 .dlg .foot .left{margin-right:auto}
 .dlg .fs{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
 .hint{font-size:11.5px;color:var(--muted);margin-top:4px}
@@ -324,7 +330,7 @@ mark{background:#fff3b0;padding:0 1px;border-radius:2px}
     <span class="cnt" id="boardCnt" style="font-size:12px;color:var(--muted)"></span>
     <span style="flex:1"></span>
     <span class="chip q">4분면 시간 관리법</span>
-    <label style="font-size:12px;color:var(--muted);display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="boardMonthOnly" checked> 이번 달만</label>
+    <label style="font-size:12px;color:var(--muted);display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="boardMonthOnly"> 이번 달 이후</label>
   </div>
   <div class="board" id="board"></div>
   <div class="list-h">
@@ -1360,20 +1366,28 @@ function renderMonths(){
 // ================== 모달 ==================
 const modal = document.getElementById('modal');
 let dlg = null; // {onSave, onDelete}
-function openDialog(title, bodyHTML, onSave, onDelete){
+function openDialog(title, bodyHTML, onSave, onDelete, position='right'){
   document.getElementById('dlgTitle').textContent = title;
   document.getElementById('dlgBody').innerHTML = bodyHTML;
   const del = document.getElementById('dlgDelete'); del.hidden = !onDelete;
   dlg = {onSave, onDelete};
+  modal.classList.toggle('center', position==='center');
+  modal.classList.toggle('right', position!=='center');
   modal.classList.add('on');
   const first = modal.querySelector('input,textarea,select'); if(first) first.focus();
 }
-function closeDialog(){ modal.classList.remove('on'); dlg=null; }
-document.getElementById('dlgCancel').onclick = closeDialog;
-document.getElementById('dlgSave').onclick = ()=>{ if(dlg && dlg.onSave()!==false){ closeDialog(); } };
-document.getElementById('dlgDelete').onclick = ()=>{ if(dlg && dlg.onDelete && confirm('삭제할까요?')){ dlg.onDelete(); closeDialog(); } };
-modal.addEventListener('click', e=>{ if(e.target===modal) closeDialog(); });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('on')) closeDialog(); });
+function closeDialog(shouldSave=true){
+  if(shouldSave && dlg && dlg.onSave){
+    if(dlg.onSave()===false) return;
+  }
+  modal.classList.remove('on');
+  dlg=null;
+}
+document.getElementById('dlgCancel').onclick = ()=>closeDialog(false);
+document.getElementById('dlgSave').onclick = ()=>closeDialog(true);
+document.getElementById('dlgDelete').onclick = ()=>{ if(dlg && dlg.onDelete && confirm('삭제할까요?')){ dlg.onDelete(); closeDialog(false); } };
+modal.addEventListener('click', e=>{ if(e.target===modal) closeDialog(true); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('on')) closeDialog(true); });
 const $v = id => document.getElementById(id).value.trim();
 const optHTML = (arr, sel) => arr.map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
 
@@ -1550,7 +1564,7 @@ function renderCal(){
 }
 function renderBoard(items){
   const monthOnly = document.getElementById('boardMonthOnly').checked;
-  let list = items.filter(c => !monthOnly || (c.start && c.start.slice(0,7)===calYM));
+  let list = items.filter(c => !monthOnly || (c.start && c.start.slice(0,7)>=calYM));
   const key = 'quad';
   const groups = {}; QUADS.forEach(q=>groups[q]=[]);
   list.forEach(c=>{ const g = c.quad; if(groups[g]) groups[g].push(c); });
@@ -1581,9 +1595,30 @@ function renderHours(list){
   document.getElementById('hoursTotal').innerHTML = `<td></td><td>Total</td><td></td><td class="h"><b>${fmtH(total)}</b></td><td class="md"><b>${fmtMD(total)} MD</b></td>`;
 }
 function fmtNote(n){
-  let h = esc(n).replace(/~~(.+?)~~/g,'<s>$1</s>');
+  let h = esc(n).replace(/\n/g,'<br>').replace(/~~(.+?)~~/g,'<s>$1</s>');
   h = h.replace(/(https?:\/\/[^\s<]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener">${u.replace(/^https?:\/\//,'').slice(0,42)}${u.length>50?'…':''}</a>`);
   return h;
+}
+function calDialogCenter(c, presetDate){
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
+  openDialog(isNew?'일정 추가':'일정 수정', `
+    <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
+    <div class="fs"><div class="f"><label for="f_start">마감일 (시작)</label><input type="date" id="f_start" value="${c.start||''}"></div>
+    <div class="f"><label for="f_end">종료일 (기간일 때만)</label><input type="date" id="f_end" value="${c.end||''}"></div></div>
+    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div>
+    <div class="f"><label for="f_quad">4분면 시간 관리법</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div></div>
+    <div class="fs"><div class="f"><label for="f_time">시간</label><input type="text" id="f_time" value="${esc(c.time)}" placeholder="예: 10:30 ~"></div>
+    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
+    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" style="min-height:110px">${esc((c.notes||[]).join('\n'))}</textarea></div>
+    <div class="f"><label class="chk"><input type="checkbox" id="f_done" ${c.done?'checked':''}> 완료</label></div>`,
+    ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
+      const start=$v('f_start'), end=$v('f_end');
+      if(end && start && end<start){ alert('종료일이 시작일보다 빠릅니다'); return false; }
+      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:(end&&end!==start)?end:'', status:$v('f_status'), quad:$v('f_quad'), time:$v('f_time'), hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
+        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked };
+      if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
+      if(start) calYM = start.slice(0,7); save(); },
+    isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); }, 'center');
 }
 function calDialog(c, presetDate){
   const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
@@ -1615,8 +1650,8 @@ document.getElementById('boardMonthOnly').onchange = renderCal;
 document.getElementById('addCal').onclick = ()=>calDialog(null, todayStr());
 document.getElementById('calDone').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; calDoneMode=b.dataset.v; [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b)); renderCal(); });
 document.getElementById('calGrid').addEventListener('click', e=>{
-  const ev = e.target.closest('.ev'); if(ev){ calDialog(DB.cal.find(x=>x.id===ev.dataset.id)); return; }
-  const cell = e.target.closest('.cell'); if(cell) calDialog(null, cell.dataset.date);
+  const ev = e.target.closest('.ev'); if(ev){ calDialogCenter(DB.cal.find(x=>x.id===ev.dataset.id)); return; }
+  const cell = e.target.closest('.cell'); if(cell) calDialogCenter(null, cell.dataset.date);
 });
 // 드래그앤드롭으로 그룹 이동
 const boardEl = document.getElementById('board');
@@ -1692,7 +1727,8 @@ document.getElementById('hoursTable').addEventListener('change', e=>{
   const c=DB.cal.find(x=>x.id===inp.closest('tr').dataset.id); if(!c) return;
   c.hours = inp.value==='' ? null : Math.max(0, Math.round(Number(inp.value))); save();
 });
-document.getElementById('hoursTable').addEventListener('click', e=>{ if(e.target.closest('input')) return; const tr=e.target.closest('tr[data-id]'); if(tr) calDialog(DB.cal.find(x=>x.id===tr.dataset.id)); });
+// 작업시간 표 행 클릭 시 팝업 안 나오도록 수정
+// document.getElementById('hoursTable').addEventListener('click', e=>{ if(e.target.closest('input')) return; const tr=e.target.closest('tr[data-id]'); if(tr) calDialog(DB.cal.find(x=>x.id===tr.dataset.id)); });
 
 // 내보내기 / 가져오기 / 초기화
 document.getElementById('btnExport').onclick = ()=>{
