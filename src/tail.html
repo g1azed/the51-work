@@ -9,12 +9,12 @@ function load(){
   try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){}
 }
 function migrate(){
-  // v1 저장본에 캘린더/과거 일지가 없으면 시드에서 보충
-  if(!DB.cal){ DB.cal = JSON.parse(JSON.stringify(SEED.cal)); }
-  ['calStatus','quad','designers'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
+  // 누락된 필드/옵션 기본값 보충 (데이터 자체는 Supabase 에서 옴)
+  ['projects','todos','notes','months','cal'].forEach(k=>{ if(!Array.isArray(DB[k])) DB[k] = []; });
+  if(!DB.options) DB.options = {};
+  ['related','status','tags','calStatus','quad','designers'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
   DB.options.quad = [...QUADS];
   DB.cal.forEach(c=>{ if(QUAD_MIGRATE[c.quad]) c.quad = QUAD_MIGRATE[c.quad]; });
-  SEED.months.forEach(sm=>{ if(!DB.months.find(m=>m.key===sm.key)) DB.months.push(JSON.parse(JSON.stringify(sm))); });
 }
 function save(show=true){
   DB.updatedAt = new Date().toISOString();
@@ -541,75 +541,206 @@ document.getElementById('fileImport').onchange = function(){
     if(confirm('현재 데이터를 불러온 파일로 교체할까요?')){ openMonths=null; save(); toast('가져오기 완료'); } else { load(); } }catch(e){ alert('올바른 백업 파일이 아닙니다'); } };
   r.readAsText(f); this.value='';
 };
-document.getElementById('btnReset').onclick = ()=>{ if(confirm('모든 변경사항을 지우고 Notion 초기 데이터로 되돌릴까요?\n(먼저 내보내기로 백업하는 것을 권장합니다)')){ DB=JSON.parse(JSON.stringify(SEED)); openMonths=null; save(); } };
 
 let toastT; function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),1600); }
 
-// ================== GitHub 동기화 ==================
-const SYNC_KEY = KEY+':sync';
-function syncCfg(){ try{ return Object.assign({owner:'g1azed', repo:'the51x-work', branch:'main', path:'data/data.json', token:''}, JSON.parse(localStorage.getItem(SYNC_KEY)||'{}')); }catch(e){ return {owner:'g1azed', repo:'the51x-work', branch:'main', path:'data/data.json', token:''}; } }
-let syncState = { status:'off', sha:null, msg:'', timer:null, pushing:false, dirty:false };
-function setSync(status, msg){ syncState.status=status; syncState.msg=msg||''; const el=document.getElementById('syncBtn'); if(!el) return;
-  const map={off:['⚪','동기화 미설정'], ok:['🟢','동기화됨'], busy:['🟡','동기화 중…'], err:['🔴','동기화 오류'], offline:['⚪','오프라인(로컬 저장)']};
-  const [dot,label]=map[status]||map.off; el.innerHTML=`${dot} <span>${label}</span>`; el.title = msg || label; }
-const b64enc = str => btoa(Array.from(new TextEncoder().encode(str), b=>String.fromCharCode(b)).join(''));
-const b64dec = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g,'')), c=>c.charCodeAt(0)));
-async function ghFetch(cfg, method='GET', body=null, extraPath=''){
-  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path}${extraPath}${method==='GET'?`?ref=${encodeURIComponent(cfg.branch)}&t=${Date.now()}`:''}`;
-  const r = await fetch(url, { method, headers:{ 'Authorization':`Bearer ${cfg.token}`, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28', ...(body?{'Content-Type':'application/json'}:{}) }, body: body?JSON.stringify(body):null });
-  if(r.status===404) return {notFound:true, status:404};
-  const data = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(`${r.status} ${data.message||''}`);
-  return data;
+// ================== Supabase 동기화 ==================
+// Updated: 2026-09-29 14:40 — GitHub(data.json) 동기화를 Supabase 로 교체.
+// 앱은 기존처럼 DB 객체 하나를 수정하고 save() 를 부르면 되고, 이 절이
+//  · 불러오기: 6개 테이블 → DB 객체로 조립
+//  · 저장: 마지막 동기화 스냅샷과 비교해 "바뀐 행만" upsert, 사라진 행만 delete
+// 를 처리합니다. anon 키는 공개용이며 접근은 RLS(본인 행만)로 제한됩니다.
+const SB_URL = 'https://cjulprpayqllczddcros.supabase.co';
+const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqdWxwcnBheXFsbGN6ZGRjcm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2NDYzMDcsImV4cCI6MjEwNjIyMjMwN30.pcKYwLN-gHZS9xV70PWP76WERpjJ8DLcwFwIHwl4JMM';
+const SB_SESSION_KEY = KEY+':sb';      // 로그인 세션
+const SB_SNAP_KEY = KEY+':snap';       // 마지막으로 동기화된 행 스냅샷
+const SB_DIRTY_KEY = KEY+':dirty';     // 아직 서버에 못 올린 변경이 있음
+const SB_MIGRATED_AT = '2026-09-08T06:39:11.627Z'; // 이전 시점 data.json 의 updatedAt (최초 1회 판단용)
+const SB_TABLES = ['options','projects','todos','notes','work_logs','calendar_items'];
+const SB_PK = { options:'key' };       // 그 외는 id
+const nz = v => (v ? v : null);        // '' → null (date 컬럼)
+const ds = v => (v ?? '');             // null → ''
+
+// ---- DB 객체 ⇄ 테이블 행 변환 ----
+function toRows(db){
+  const r = {};
+  r.options = Object.entries(db.options||{}).map(([key,values])=>({key, values}));
+  r.options.push({key:'_months', values:(db.months||[]).map(m=>m.key).sort()}); // 빈 달도 보존
+  r.projects = (db.projects||[]).map(p=>({id:p.id, name:p.name||'', related:p.related||'', status:p.status||'', date:nz(p.date), memo:p.memo||''}));
+  r.todos = (db.todos||[]).map(t=>({id:t.id, name:t.name||'', tags:t.tags||[], date:nz(t.date), status:t.status||'', project_id:t.project||'', designer:t.designer||'', rms:t.rms||''}));
+  r.notes = (db.notes||[]).map(n=>({id:n.id, title:n.title||'', body:n.body||''}));
+  r.work_logs = (db.months||[]).flatMap(m=>(m.entries||[]).map(e=>({id:e.id, month_key:m.key, date:nz(e.date), log:e.log||'', memo:e.memo||''})));
+  r.calendar_items = (db.cal||[]).map(c=>({id:c.id, nid:c.nid??null, name:c.name||'', start_date:nz(c.start), end_date:nz(c.end), status:c.status||'', quad:c.quad||'', done:!!c.done, time:c.time||'', hours:c.hours??null, designer:c.designer||'', rms:c.rms||'', who:c.who||[], notes:c.notes||[]}));
+  return r;
 }
+// 옛 id(p1, t5, c17, d0901)는 숫자순, 새로 만든 id(uid)는 그 뒤에 생성순
+const idRank = id => { const m=/^[a-z]{1,2}(\d{1,5})$/.exec(id); return m ? [0,+m[1],''] : [1,0,id]; };
+const byId = (a,b) => { const x=idRank(a.id), y=idRank(b.id); return (x[0]-y[0]) || (x[1]-y[1]) || (x[2]<y[2]?-1:x[2]>y[2]?1:0); };
+function fromRows(R){
+  const options = {}; let monthKeys = [];
+  R.options.forEach(o=>{ if(o.key==='_months') monthKeys=o.values||[]; else options[o.key]=o.values; });
+  const by = {};
+  R.work_logs.forEach(w=>{ (by[w.month_key]=by[w.month_key]||[]).push({id:w.id, date:ds(w.date), log:w.log, memo:w.memo}); });
+  monthKeys.forEach(k=>{ if(!by[k]) by[k]=[]; });
+  const months = Object.keys(by).sort().map(key=>({key, entries:by[key].sort((a,b)=>a.date.localeCompare(b.date)||byId(a,b))}));
+  return {
+    version:1, options,
+    projects: R.projects.slice().sort(byId).map(p=>({id:p.id, name:p.name, related:p.related, status:p.status, date:ds(p.date), memo:p.memo})),
+    todos: R.todos.slice().sort(byId).map(t=>({id:t.id, name:t.name, tags:t.tags||[], date:ds(t.date), status:t.status, project:t.project_id, designer:t.designer, rms:t.rms})),
+    notes: R.notes.slice().sort(byId).map(n=>({id:n.id, title:n.title, body:n.body})),
+    months,
+    cal: R.calendar_items.slice().sort(byId).map(c=>({id:c.id, nid:c.nid, name:c.name, start:ds(c.start_date), end:ds(c.end_date), status:c.status, quad:c.quad, done:!!c.done, time:c.time, hours:c.hours, designer:c.designer, rms:c.rms, who:c.who||[], notes:c.notes||[]})),
+    updatedAt: new Date().toISOString()
+  };
+}
+function snapshotOf(rows){ const s={}; SB_TABLES.forEach(t=>{ const pk=SB_PK[t]||'id'; s[t]={}; rows[t].forEach(r=>{ s[t][r[pk]]=JSON.stringify(r); }); }); return s; }
+const getSnap = () => { try{ return JSON.parse(localStorage.getItem(SB_SNAP_KEY)||'null'); }catch(e){ return null; } };
+const setSnap = s => { try{ localStorage.setItem(SB_SNAP_KEY, JSON.stringify(s)); }catch(e){} };
+const setDirtyFlag = on => { try{ on ? localStorage.setItem(SB_DIRTY_KEY,'1') : localStorage.removeItem(SB_DIRTY_KEY); }catch(e){} };
+const isDirtyFlag = () => { try{ return localStorage.getItem(SB_DIRTY_KEY)==='1'; }catch(e){ return false; } };
+
+// ---- 인증 / REST ----
+let syncState = { status:'off', msg:'', timer:null, pending:false, pushing:false, dirty:false, pulling:false, lastPull:0 };
+function sbSession(){ try{ return JSON.parse(localStorage.getItem(SB_SESSION_KEY)||'null'); }catch(e){ return null; } }
+function sbSetSession(s){ try{ s ? localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s)) : localStorage.removeItem(SB_SESSION_KEY); }catch(e){} }
+async function sbAuth(grant, body){
+  const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=${grant}`, {method:'POST', headers:{apikey:SB_ANON_KEY,'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok){ const e=new Error(d.msg||d.error_description||d.message||('HTTP '+r.status)); e.status=r.status; throw e; }
+  const s = { access_token:d.access_token, refresh_token:d.refresh_token, expires_at:Math.floor(Date.now()/1000)+(d.expires_in||3600), email:(d.user&&d.user.email)||(sbSession()||{}).email||'' };
+  sbSetSession(s); return s;
+}
+async function sbToken(){
+  let s = sbSession(); if(!s) throw new Error('로그인이 필요합니다');
+  if(s.expires_at - 60 < Date.now()/1000){
+    try{ s = await sbAuth('refresh_token', {refresh_token:s.refresh_token}); }
+    catch(e){ if(e.status===400||e.status===401){ sbSetSession(null); setSync('off'); throw new Error('로그인이 만료되었습니다. 다시 로그인하세요'); } throw e; }
+  }
+  return s.access_token;
+}
+async function sbRest(path, {method='GET', body=null, headers={}}={}){
+  const token = await sbToken();
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {method, headers:{apikey:SB_ANON_KEY, Authorization:'Bearer '+token, ...(body?{'Content-Type':'application/json'}:{}), ...headers}, body:body?JSON.stringify(body):null});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.message||('HTTP '+r.status)); }
+  return r.status===204 ? null : r.json().catch(()=>null);
+}
+async function sbSelectAll(table){
+  const out = [];
+  for(let from=0;;from+=1000){
+    const page = await sbRest(`${table}?select=*&order=${SB_PK[table]||'id'}`, {headers:{'Range-Unit':'items', Range:`${from}-${from+999}`}});
+    out.push(...page); if(page.length<1000) break;
+  }
+  return out;
+}
+
+// ---- 상태 표시 ----
+function setSync(status, msg){ syncState.status=status; syncState.msg=msg||''; const el=document.getElementById('syncBtn'); if(!el) return;
+  const map={off:['⚪','로그인 필요'], ok:['🟢','동기화됨'], busy:['🟡','동기화 중…'], err:['🔴','동기화 오류']};
+  const [dot,label]=map[status]||map.off; el.innerHTML=`${dot} <span>${label}</span>`; el.title = msg || label; }
+
+// ---- 불러오기 ----
 async function pullRemote(silent=false){
-  const cfg=syncCfg(); if(!cfg.token) { setSync('off'); return false; }
-  setSync('busy');
+  if(!sbSession()){ setSync('off'); return false; }
+  if(syncState.pulling || syncState.pushing) return false;
   try{
-    const res = await ghFetch(cfg);
-    if(res.notFound){ syncState.sha=null; setSync('ok','원격에 data.json 없음 — 첫 저장 시 생성'); return false; }
-    syncState.sha = res.sha;
-    const remote = JSON.parse(b64dec(res.content));
-    const localTime = DB.updatedAt||'', remoteTime = remote.updatedAt||'';
-    if(remoteTime >= localTime){ DB = remote; migrate(); try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(_){} openMonths=null; render(); setSync('ok', `마지막 동기화 ${new Date().toLocaleTimeString('ko-KR')}`); if(!silent) toast('GitHub에서 불러왔습니다'); }
-    else { setSync('ok','로컬이 더 최신 — 업로드'); await pushRemote(); }
+    // 서버에 못 올린 변경이 있으면 먼저 올린 뒤 불러옴(스냅샷이 있을 때만)
+    if(getSnap() && (isDirtyFlag() || syncState.pending)){ await pushRemote(); if(isDirtyFlag()) return false; }
+    syncState.pulling = true; setSync('busy');
+    const R = {}; for(const t of SB_TABLES) R[t] = await sbSelectAll(t);
+    const remote = fromRows(R);
+    const remoteSnap = snapshotOf(toRows(remote));
+    // 최초 1회: 이 브라우저에 이전 시점(9/8) 이후 수정한 내용이 있으면 덮어쓰기 전에 물어봄
+    if(!getSnap() && (DB.updatedAt||'') > SB_MIGRATED_AT){
+      if(confirm('이 브라우저에 Supabase로 옮긴 데이터(9/8 기준)보다 최신 수정 내용이 있습니다.\n\n[확인] 이 브라우저의 데이터를 Supabase에 올립니다\n[취소] Supabase 데이터를 사용합니다 (이 브라우저 데이터는 백업 파일로 먼저 내려받습니다)')){
+        setSnap(remoteSnap); syncState.pulling=false; syncState.lastPull=Date.now(); setDirtyFlag(true); await pushRemote(); return true;
+      }
+      document.getElementById('btnExport').click();
+    }
+    DB = remote; setSnap(remoteSnap);
+    migrate();
+    try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(_){}
+    openMonths = null; render();
+    syncState.lastPull = Date.now(); setDirtyFlag(false);
+    setSync('ok', `마지막 동기화 ${new Date().toLocaleTimeString('ko-KR')}`);
+    if(!silent) toast('Supabase에서 불러왔습니다');
+    // migrate() 가 채운 기본값 등 서버와 다른 부분이 있으면 올림
+    const now = snapshotOf(toRows(DB)); if(JSON.stringify(now)!==JSON.stringify(remoteSnap)) schedulePush();
     return true;
   }catch(e){ setSync('err', String(e.message)); if(!silent) toast('불러오기 실패: '+e.message); return false; }
+  finally{ syncState.pulling = false; }
 }
+
+// ---- 저장(바뀐 행만) ----
 async function pushRemote(){
-  const cfg=syncCfg(); if(!cfg.token) return false;
-  if(syncState.pushing){ syncState.dirty=true; return; }
-  syncState.pushing=true; setSync('busy');
+  if(!sbSession() || !getSnap()) return false;   // 스냅샷 없음 = 아직 한 번도 불러오지 않음 → 덮어쓰기 방지
+  if(syncState.pushing || syncState.pulling){ syncState.dirty=true; return false; }
+  syncState.pushing = true; syncState.pending = false; setSync('busy');
+  let ok = true;
   try{
-    const body = { message:`update data ${DB.updatedAt||''}`, content:b64enc(JSON.stringify(DB,null,1)), branch:cfg.branch };
-    if(syncState.sha) body.sha = syncState.sha;
-    let res;
-    try{ res = await ghFetch(cfg,'PUT',body); }
-    catch(e){ if(/^(409|422)/.test(e.message)){ const cur=await ghFetch(cfg); if(!cur.notFound){ body.sha=cur.sha; } else delete body.sha; res = await ghFetch(cfg,'PUT',body); } else throw e; }
-    syncState.sha = res.content && res.content.sha;
+    const rows = toRows(DB), snap = getSnap();
+    for(const t of SB_TABLES){
+      const pk = SB_PK[t]||'id', cur = {};
+      rows[t].forEach(r=>{ cur[r[pk]] = JSON.stringify(r); });
+      const old = snap[t]||{};
+      const changed = rows[t].filter(r=>old[r[pk]]!==cur[r[pk]]);
+      const removed = Object.keys(old).filter(k=>!(k in cur));
+      const oldN = Object.keys(old).length;
+      if(removed.length>20 && removed.length>oldN/2 && !confirm(`${t}: ${oldN}건 중 ${removed.length}건을 Supabase에서 삭제합니다. 계속할까요?`)) throw new Error('대량 삭제가 취소되었습니다');
+      for(let i=0;i<changed.length;i+=200)
+        await sbRest(`${t}?on_conflict=user_id,${pk}`, {method:'POST', body:changed.slice(i,i+200), headers:{Prefer:'resolution=merge-duplicates,return=minimal'}});
+      for(let i=0;i<removed.length;i+=50){
+        const list = removed.slice(i,i+50).map(k=>`"${k.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"`).join(',');
+        await sbRest(`${t}?${pk}=in.${encodeURIComponent('('+list+')')}`, {method:'DELETE'});
+      }
+      snap[t] = cur; setSnap(snap);
+    }
     setSync('ok', `마지막 동기화 ${new Date().toLocaleTimeString('ko-KR')}`);
-  }catch(e){ setSync('err', String(e.message)); toast('GitHub 저장 실패: '+e.message); }
-  finally{ syncState.pushing=false; if(syncState.dirty){ syncState.dirty=false; pushRemote(); } }
+  }catch(e){ ok=false; setSync('err', String(e.message)); toast('Supabase 저장 실패: '+e.message); }
+  finally{
+    syncState.pushing = false;
+    if(syncState.dirty){ syncState.dirty=false; pushRemote(); }
+    else if(ok && !syncState.pending) setDirtyFlag(false);
+  }
+  return ok;
 }
-function schedulePush(){ const cfg=syncCfg(); if(!cfg.token) return; clearTimeout(syncState.timer); setSync('busy'); syncState.timer=setTimeout(pushRemote, 1500); }
-window.addEventListener('beforeunload', e=>{ if(syncState.status==='busy'){ e.preventDefault(); e.returnValue=''; } });
+function schedulePush(){
+  setDirtyFlag(true);
+  if(!sbSession()){ setSync('off','로그인하면 다른 기기와 동기화됩니다 (지금은 이 브라우저에만 저장)'); return; }
+  syncState.pending = true; clearTimeout(syncState.timer); setSync('busy'); syncState.timer = setTimeout(pushRemote, 1000);
+}
+window.addEventListener('beforeunload', e=>{ if(syncState.pending || syncState.pushing){ e.preventDefault(); e.returnValue=''; } });
+// 다른 기기에서 수정했을 수 있으니, 탭으로 돌아올 때 최신 데이터 확인
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState!=='visible' || !sbSession()) return;
+  if(Date.now()-syncState.lastPull<30000 || syncState.pushing || syncState.pending || modal.classList.contains('on')) return;
+  pullRemote(true);
+});
+
+// ---- 로그인 / 동기화 창 ----
 function syncDialog(){
-  const c=syncCfg();
-  openDialog('GitHub 동기화 설정', `
-    <div class="f hint" style="padding-top:10px">데이터(data.json)를 GitHub 저장소에 자동 저장합니다. 변경 후 1.5초 뒤 커밋되고, 열 때마다 저장소에서 최신 데이터를 불러옵니다.</div>
-    <div class="fs"><div class="f"><label for="s_owner">GitHub 사용자</label><input type="text" id="s_owner" value="${esc(c.owner)}"></div>
-    <div class="f"><label for="s_repo">저장소</label><input type="text" id="s_repo" value="${esc(c.repo)}"></div></div>
-    <div class="fs"><div class="f"><label for="s_branch">브랜치</label><input type="text" id="s_branch" value="${esc(c.branch)}"></div>
-    <div class="f"><label for="s_path">데이터 파일 경로</label><input type="text" id="s_path" value="${esc(c.path)}"></div></div>
-    <div class="f"><label for="s_token">Personal Access Token</label><input type="password" id="s_token" value="${esc(c.token)}" placeholder="github_pat_…" autocomplete="off">
-      <div class="hint">GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate new token<br>· Repository access: <b>Only select repositories → ${esc(c.repo)}</b><br>· Permissions → Repository permissions → <b>Contents: Read and write</b><br>토큰은 이 브라우저(localStorage)에만 저장되고 GitHub API 호출에만 사용됩니다.</div></div>
-    <div class="f" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="s_test" type="button">연결 테스트</button><button class="btn sm" id="s_pull" type="button">⬇ 지금 불러오기</button><button class="btn sm" id="s_push" type="button">⬆ 지금 저장</button><span id="s_msg" class="hint" style="align-self:center"></span></div>`,
-    ()=>{ localStorage.setItem(SYNC_KEY, JSON.stringify({owner:$v('s_owner'), repo:$v('s_repo'), branch:$v('s_branch')||'main', path:$v('s_path')||'data/data.json', token:$v('s_token')})); syncState.sha=null; pullRemote(); });
-  const saveCfg = ()=>{ localStorage.setItem(SYNC_KEY, JSON.stringify({owner:$v('s_owner'), repo:$v('s_repo'), branch:$v('s_branch')||'main', path:$v('s_path')||'data/data.json', token:$v('s_token')})); };
-  const msg = t => document.getElementById('s_msg').textContent = t;
-  document.getElementById('s_test').onclick = async ()=>{ saveCfg(); msg('확인 중…'); try{ const r=await ghFetch(syncCfg()); msg(r.notFound?'연결 OK — data.json은 아직 없음(첫 저장 시 생성)':'연결 OK — data.json 확인됨'); }catch(e){ msg('실패: '+e.message); } };
-  document.getElementById('s_pull').onclick = async ()=>{ saveCfg(); syncState.sha=null; msg('불러오는 중…'); const ok=await pullRemote(); msg(ok?'불러오기 완료':'불러올 데이터가 없거나 실패: '+syncState.msg); };
-  document.getElementById('s_push').onclick = async ()=>{ saveCfg(); msg('저장 중…'); if(!syncState.sha){ try{ const r=await ghFetch(syncCfg()); if(!r.notFound) syncState.sha=r.sha; }catch(e){} } await pushRemote(); msg(syncState.status==='ok'?'저장 완료':'실패: '+syncState.msg); };
+  const s = sbSession();
+  const msg = t => { const el=document.getElementById('s_msg'); if(el) el.textContent=t; };
+  if(s){
+    openDialog('Supabase 동기화', `
+      <div class="f hint" style="padding-top:10px">로그인: <b>${esc(s.email||'')}</b><br>수정하면 1초 뒤 바뀐 항목만 저장되고, 다른 기기에서 수정한 내용은 이 탭으로 돌아올 때 자동으로 불러옵니다.</div>
+      <div class="f" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="s_pull" type="button">⬇ 지금 불러오기</button><button class="btn sm" id="s_push" type="button">⬆ 지금 저장</button><button class="btn sm" id="s_out" type="button">로그아웃</button><span id="s_msg" class="hint" style="align-self:center"></span></div>`, null);
+    document.getElementById('s_pull').onclick = async ()=>{ msg('불러오는 중…'); msg((await pullRemote())?'불러오기 완료':'실패: '+syncState.msg); };
+    document.getElementById('s_push').onclick = async ()=>{ msg('저장 중…'); msg((await pushRemote())?'저장 완료':'실패: '+syncState.msg); };
+    document.getElementById('s_out').onclick = ()=>{ if(isDirtyFlag() && !confirm('아직 서버에 저장되지 않은 변경이 있습니다. 그래도 로그아웃할까요?')) return; sbSetSession(null); setSync('off'); closeDialog(false); toast('로그아웃했습니다'); };
+    return;
+  }
+  openDialog('Supabase 로그인', `
+    <div class="f hint" style="padding-top:10px">Supabase에 만든 계정으로 로그인하면 데이터가 서버에 저장되고 어느 기기에서 열어도 같은 데이터를 봅니다.</div>
+    <div class="f"><label for="s_email">이메일</label><input type="email" id="s_email" autocomplete="username"></div>
+    <div class="f"><label for="s_pw">비밀번호</label><input type="password" id="s_pw" autocomplete="current-password"></div>
+    <div class="f"><span id="s_msg" class="hint"></span></div>`,
+    ()=>{
+      const email=$v('s_email'), pw=document.getElementById('s_pw').value;
+      if(!email||!pw){ msg('이메일과 비밀번호를 입력하세요'); return false; }
+      msg('로그인 중…');
+      sbAuth('password',{email, password:pw}).then(()=>{ closeDialog(false); return pullRemote(); }).catch(e=>msg('로그인 실패: '+e.message));
+      return false;
+    });
 }
 document.getElementById('syncBtn').onclick = syncDialog;
 
@@ -617,8 +748,8 @@ document.getElementById('syncBtn').onclick = syncDialog;
 load();
 try{ const v=localStorage.getItem(KEY+':view'); if(v){ const b=document.querySelector(`[data-view=${v}]`); if(b) b.click(); } }catch(e){}
 render();
-setSync(syncCfg().token?'busy':'off');
-if(syncCfg().token) pullRemote(true);
+setSync(sbSession()?'busy':'off');
+if(sbSession()) pullRemote(true);
 </script>
 </body>
 </html>

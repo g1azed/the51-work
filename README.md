@@ -1,26 +1,19 @@
 # 🌊 더피프티원엑스 업무관리
 
-
  https://g1azed.github.io/the51-work/
 
 노션의 "더피프티원엑스 업무관리" 페이지를 단일 HTML 앱으로 옮긴 프로젝트입니다.
-서버 없이 `index.html` 하나로 동작하며, 데이터는 이 저장소의 `data/data.json`에 자동 저장됩니다.
+`index.html` 하나로 동작하며, 데이터는 **Supabase**(Postgres)에 저장됩니다.
 
 ## 사용 방법
 
-1. 저장소를 클론하거나 `index.html`을 내려받아 브라우저로 엽니다.
-2. 상단 **동기화** 버튼 → GitHub Personal Access Token(아래 참고)을 입력하고 저장합니다.
-3. 이후 할 일·일정·일지를 수정하면 1.5초 뒤 `data/data.json`이 자동 커밋되고,
-   앱을 열 때마다 저장소의 최신 데이터를 불러옵니다. 어느 컴퓨터/브라우저에서 열어도 같은 데이터를 봅니다.
+1. `index.html`(또는 위 주소)을 브라우저로 엽니다.
+2. 상단 **로그인 필요** 버튼 → Supabase에 만든 계정(이메일/비밀번호)으로 로그인합니다.
+3. 이후 할 일·일정·일지를 수정하면 1초 뒤 바뀐 항목만 자동 저장되고,
+   다른 기기에서 수정한 내용은 탭으로 돌아올 때 자동으로 불러옵니다.
 
-### 토큰 만들기 (Fine-grained PAT)
-
-GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token
-
-- Repository access: **Only select repositories → the51x-work**
-- Permissions → Repository permissions → **Contents: Read and write**
-
-토큰은 브라우저 localStorage에만 저장되며, GitHub API 호출 외에는 사용되지 않습니다.
+데이터 확인·수정·CSV 내보내기는 Supabase 대시보드 → **Table Editor** 에서 할 수 있습니다.
+로그인하지 않으면 이 브라우저(localStorage)에만 저장됩니다.
 
 ## 구성
 
@@ -35,13 +28,14 @@ GitHub → Settings → Developer settings → Personal access tokens → **Fine
 ```
 src/
   head.html        # 마크업 + CSS
-  tail.html        # 앱 로직 (렌더, 다이얼로그, GitHub 동기화)
-  seed.js          # 초기 데이터 (프로젝트/할 일/메모/2026.07~09 일지)
-  seed_helpers.js  # 시드 헬퍼
-  months/          # 과거 업무일지 · 캘린더 일정 시드
-data/data.json     # 실제 데이터 (앱이 자동 커밋)
+  tail.html        # 앱 로직 (렌더, 다이얼로그, Supabase 동기화)
+  seed.js          # 옵션 기본값(상태/태그/기획자 등)과 빈 초기 상태 — 실제 데이터는 Supabase
+supabase/
+  schema.sql       # 테이블 + RLS 정의 (SQL Editor 에서 실행, 여러 번 실행해도 안전)
+  migrate.mjs      # 예전 data.json → Supabase 1회성 이전 스크립트 (이전 완료, 기록용)
 build.sh           # src/ → index.html 조립
 ```
 
 수정 후 `./build.sh` 로 `index.html`을 다시 만듭니다.
-`data/data.json`이 있는 한 시드는 최초 1회(또는 초기화 버튼)에만 사용됩니다.
+Supabase URL과 anon 키(공개용)는 `src/tail.html` 의 `SB_URL`, `SB_ANON_KEY` 에 있고, 접근은 RLS(본인 행만)로 제한됩니다.
+예전 `data/data.json` 은 git 기록(커밋 `f0032a9`)에 남아 있습니다: `git show f0032a9:data/data.json`
