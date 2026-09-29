@@ -66,6 +66,9 @@ main{max-width:1400px;margin:0 auto;padding:20px 24px 80px}
 .chip.s-없음{background:var(--gray-soft);color:var(--muted)}
 .chip.t-중요{background:var(--red-soft);color:var(--red)} .chip.t-긴급{background:var(--green-soft);color:var(--green)}
 .chip.rel{background:var(--blue-soft);color:var(--blue)}
+.chip.designer{background:var(--purple-soft);color:var(--purple)}
+.chip.rms{background:var(--blue-soft);color:var(--blue);text-decoration:none;cursor:pointer}
+.chip.rms:hover{filter:brightness(.95)}
 .chip.due{background:var(--gray-soft);color:var(--muted);font-weight:500}
 .chip.due.today{background:var(--accent-soft);color:var(--accent-ink)} .chip.due.over{background:var(--red-soft);color:var(--red)}
 .chip.dow{background:var(--purple-soft);color:var(--purple)}
@@ -150,10 +153,10 @@ table.j tr:hover .ops .btn{opacity:1}
 .seg button.on{background:var(--accent);color:#fff}
 .cal-wrap{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
 .calendar{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
-.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:max-content}
 .cal-grid .dh{padding:8px 0;text-align:center;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);background:#fafbfc}
 .cal-grid .dh:first-child{color:var(--red)} .cal-grid .dh:nth-child(7){color:var(--blue)}
-.cell{min-height:104px;min-width:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 5px;position:relative;cursor:pointer;transition:.12s}
+.cell{min-height:80px;min-width:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 5px;position:relative;cursor:pointer;transition:.12s}
 .cell:nth-child(7n){border-right:0}
 .cell:hover{background:#f6f9fc}
 .cell.other{background:#fafafa;color:#b8c2cc}
@@ -173,7 +176,7 @@ table.j tr:hover .ops .btn{opacity:1}
 .cell .ev.c-brown{background:var(--brown-soft);color:var(--brown);border-left-color:var(--brown)}
 .cell .ev.c-blue{background:var(--blue-soft);color:var(--blue);border-left-color:var(--blue)}
 .cell .ev.c-pink{background:#fbe6f0;color:#b8347a;border-left-color:#d64d97}
-.cell .more{font-size:11px;color:var(--muted);padding-left:4px}
+.cell .more{display:none}
 .cell .ev.dragging{opacity:.4;cursor:grabbing}
 .cell.over{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:-2px}
 .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
@@ -188,9 +191,14 @@ table.j tr:hover .ops .btn{opacity:1}
 .bcol.over{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:-2px}
 .bcard .t{font-weight:600;word-break:break-word}
 .bcard.done .t{text-decoration:line-through;color:var(--muted);font-weight:500}
-.bcard .m{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.bcard .m{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
 .bcard .n{color:var(--muted);font-size:11.5px;margin-top:3px;white-space:pre-wrap;word-break:break-all}
 .bcard .n s{opacity:.6}
+#view-cal{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+#view-cal .cal-section{grid-column:1;display:flex;flex-direction:column;gap:0}
+#view-cal .list-section{grid-column:2;display:flex;flex-direction:column;gap:10px}
+#view-cal .list-h:last-of-type{grid-column:1/-1}
+#view-cal .panel{grid-column:1/-1}
 .list-h{display:flex;align-items:center;gap:8px;margin:18px 0 10px;flex-wrap:wrap}
 .list-h h3{margin:0;font-size:14px;color:var(--accent-ink)}
 .list-h h3::before{content:"◽"}
@@ -236,8 +244,12 @@ table.hours tfoot td.md{color:var(--accent-ink)}
 .dlg>div:not(h3):not(.foot){flex:1;overflow-y:auto;padding:20px}
 .dlg .f{padding:6px 0}
 .dlg .f label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
-.dlg .f input[type=text],.dlg .f input[type=date],.dlg .f select,.dlg .f textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
+.dlg .f input[type=text],.dlg .f input[type=date],.dlg .f input[type=url],.dlg .f select,.dlg .f textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
 .dlg .f textarea{min-height:90px;resize:vertical}
+.dlg .f textarea.auto-height{min-height:60px;max-height:none;resize:none;overflow:hidden}
+.dlg .f .input-with-hint{display:flex;align-items:center;gap:8px}
+.dlg .f .input-with-hint input{flex:1}
+.dlg .f .input-with-hint .hint{flex-shrink:0;white-space:nowrap}
 .dlg .f .tagrow{display:flex;gap:10px;flex-wrap:wrap}
 .dlg .f .tagrow label{display:inline-flex;align-items:center;gap:4px;font-weight:500;color:var(--text);margin:0}
 .dlg .foot{display:flex;gap:6px;padding:14px 20px;border-top:1px solid var(--line);justify-content:flex-end;flex-shrink:0}
@@ -314,27 +326,31 @@ mark{background:#fff3b0;padding:0 1px;border-radius:2px}
 
 <!-- ============ 캘린더 & 리스트 ============ -->
 <section class="view" id="view-cal">
-  <div class="cal-h">
-    <button class="btn sm" id="calPrev" aria-label="이전 달">◀</button>
-    <h2 id="calTitle"></h2>
-    <button class="btn sm" id="calNext" aria-label="다음 달">▶</button>
-    <button class="btn sm ghost" id="calToday">오늘</button>
-    <div class="seg" id="calDone">
-      <button data-v="open" class="on">미완료</button><button data-v="done">완료</button><button data-v="all">전체</button>
+  <div class="cal-section">
+    <div class="cal-h">
+      <button class="btn sm" id="calPrev" aria-label="이전 달">◀</button>
+      <h2 id="calTitle"></h2>
+      <button class="btn sm" id="calNext" aria-label="다음 달">▶</button>
+      <button class="btn sm ghost" id="calToday">오늘</button>
+      <div class="seg" id="calDone">
+        <button data-v="open" class="on">미완료</button><button data-v="done">완료</button><button data-v="all">전체</button>
+      </div>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="addCal">+ 일정 추가</button>
     </div>
-    <input class="search" id="calSearch" type="search" placeholder="일정 검색 (DCBGIT 번호, 제목)" aria-label="일정 검색" style="min-width:200px">
-    <span style="flex:1"></span>
-    <button class="btn primary" id="addCal">+ 일정 추가</button>
+    <input class="search" id="calSearch" type="search" placeholder="일정 검색 (DCBGIT 번호, 제목)" aria-label="일정 검색" style="width:100%;margin-bottom:12px">
+    <div class="calendar"><div class="cal-grid" id="calGrid"></div></div>
   </div>
-  <div class="calendar"><div class="cal-grid" id="calGrid"></div></div>
-  <div class="list-h">
-    <h3>TO DO LIST</h3>
-    <span class="cnt" id="boardCnt" style="font-size:12px;color:var(--muted)"></span>
-    <span style="flex:1"></span>
-    <span class="chip q">4분면 시간 관리법</span>
-    <label style="font-size:12px;color:var(--muted);display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="boardMonthOnly" checked> 이번 달 이후</label>
+  <div class="list-section">
+    <div class="list-h">
+      <h3>TO DO LIST</h3>
+      <span class="cnt" id="boardCnt" style="font-size:12px;color:var(--muted)"></span>
+      <span style="flex:1"></span>
+      <span class="chip q">4분면 시간 관리법</span>
+      <label style="font-size:12px;color:var(--muted);display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="boardMonthOnly" checked> 이번 달 이후</label>
+    </div>
+    <div class="board" id="board"></div>
   </div>
-  <div class="board" id="board"></div>
   <div class="list-h">
     <h3>작업시간</h3>
     <span id="hoursCnt" style="font-size:12px;color:var(--muted)"></span>
@@ -390,7 +406,8 @@ const SEED = {
   options: {
     related: ['LGU+', 'LG_Battery_Lifecare', '암웨이것모닝', '관련 업체 혹은 업무 종류 라벨링'],
     status: ['대기','보류','진행','검토','완료','취소','없음'],
-    tags: ['중요','긴급']
+    tags: ['중요','긴급'],
+    designers: ['백은주책임님','유선우책임님','하나경책임님','손지민선임님','이하람수석님','도현진책임님','박하나차장님','전한비선임님','권지수선임님','이하영선임님','김채린선임님','이지선책임님']
   },
   projects: [
     { id:'p1', name:'2026 성과 목표', related:'', status:'진행', date:'2026-03-01', memo:'' },
@@ -399,11 +416,11 @@ const SEED = {
     { id:'p4', name:'것모닝', related:'암웨이것모닝', status:'완료', date:'2025-08-18', memo:'' }
   ],
   todos: [
-    { id:'t1', name:'vue / scss 학습\n- vue3 기초문법 강의 다시\n- swiper 적용\n- scss 생각하면서 스타일링 적용', tags:[], date:'', status:'완료', project:'' },
-    { id:'t2', name:'scss', tags:[], date:'', status:'완료', project:'' },
-    { id:'t3', name:'다이소 구매', tags:[], date:'', status:'완료', project:'' },
-    { id:'t4', name:'Vuetify 연습하며 정리', tags:[], date:'', status:'완료', project:'' },
-    { id:'t5', name:'(제목 없음)', tags:[], date:'2025-08-12', status:'진행', project:'p2' }
+    { id:'t1', name:'vue / scss 학습\n- vue3 기초문법 강의 다시\n- swiper 적용\n- scss 생각하면서 스타일링 적용', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t2', name:'scss', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t3', name:'다이소 구매', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t4', name:'Vuetify 연습하며 정리', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t5', name:'(제목 없음)', tags:[], date:'2025-08-12', status:'진행', project:'p2', designer:'', rms:'' }
   ],
   notes: [
     { id:'n1', title:'회사 전용 이메일', body:'sjhong@the-51.com' },
@@ -493,8 +510,8 @@ SEED.options.quad = ['작업중','디자인~ing','퍼블리싱 완료 후 검토
 SEED.cal = [];
 const M = SEED.months;
 function E(date, log, memo){ return { id:'j'+date.replace(/-/g,''), date, log:clean(log||''), memo:clean(memo||'') }; }
-function T(nid, name, start, end, status, quad, done, time, who, notes){
-  SEED.cal.push({ id:'c'+nid, nid, name:clean(name), start:start||'', end:end||'', status:status||'', quad:quad||'', done:!!done, time:time||'', who:who||[], notes:(notes||[]).map(clean) });
+function T(nid, name, start, end, status, quad, done, time, who, notes, designer='', rms=''){
+  SEED.cal.push({ id:'c'+nid, nid, name:clean(name), start:start||'', end:end||'', status:status||'', quad:quad||'', done:!!done, time:time||'', who:who||[], notes:(notes||[]).map(clean), designer:designer||'', rms:rms||'' });
 }
 // todolist 2. (캘린더/리스트) — 1/3: 2025-05 ~ 2025-12-15
 // T(id, name, start, end, status, quadrant, done, time, who, notes[])
@@ -1289,6 +1306,8 @@ function todoHTML(t, compact=false){
       <div class="meta">
         <span class="chip s-${esc(t.status)}">${esc(t.status)}</span>
         ${(t.tags||[]).map(x=>`<span class="chip t-${esc(x)}">${esc(x)}</span>`).join('')}
+        ${t.designer ? `<span class="chip designer">[${esc(t.designer)}]</span>` : ''}
+        ${t.rms ? `<a href="${esc(t.rms)}" class="chip rms" target="_blank">[RMS]</a>` : ''}
         ${dueChip(t.date, done)}
         ${(!compact && p) ? `<span class="chip rel">${esc(p.name)}</span>` : ''}
       </div>
@@ -1379,6 +1398,15 @@ function openDialog(title, bodyHTML, onSave, onDelete, position='right'){
   modal.classList.add('on');
   if(position==='center') document.getElementById('overlay').classList.add('on');
   const first = modal.querySelector('input,textarea,select'); if(first) first.focus();
+  setupAutoHeight();
+}
+function setupAutoHeight(){
+  const textareas = document.querySelectorAll('textarea.auto-height');
+  textareas.forEach(ta => {
+    const adjust = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    adjust();
+    ta.addEventListener('input', adjust);
+  });
 }
 function closeDialog(shouldSave=true){
   if(shouldSave && dlg && dlg.onSave){
@@ -1394,18 +1422,20 @@ document.getElementById('dlgDelete').onclick = ()=>{ if(dlg && dlg.onDelete && c
 modal.addEventListener('click', e=>{ if(e.target===modal) closeDialog(true); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('on')) closeDialog(true); });
 const $v = id => document.getElementById(id).value.trim();
-const optHTML = (arr, sel) => arr.map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
+const optHTML = (arr, sel) => (arr||[]).map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
 
 function todoDialog(t){
-  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:''};
+  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:'',designer:'',rms:''};
   openDialog(isNew?'할 일 추가':'할 일 수정', `
     <div class="f"><label for="f_name">이름</label><textarea id="f_name" rows="2">${esc(t.name)}</textarea></div>
     <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status">${optHTML(DB.options.status,t.status)}</select></div>
     <div class="f"><label for="f_date">일자</label><input type="date" id="f_date" value="${t.date||''}"></div></div>
     <div class="f"><label>태그</label><div class="tagrow">${DB.options.tags.map(x=>`<label><input type="checkbox" name="f_tag" value="${esc(x)}" ${(t.tags||[]).includes(x)?'checked':''}> ${esc(x)}</label>`).join('')}</div></div>
+    <div class="fs"><div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,t.designer)}</select></div>
+    <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(t.rms||'')}"></div></div>
     <div class="f"><label for="f_proj">관련 프로젝트</label><select id="f_proj"><option value="">(없음)</option>${DB.projects.map(p=>`<option value="${p.id}" ${p.id===t.project?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value)};
+      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value), designer:$v('f_designer'), rms:$v('f_rms')};
       if(isNew) DB.todos.push(obj); else Object.assign(DB.todos.find(x=>x.id===t.id), obj); save(); },
     isNew?null:()=>{ DB.todos = DB.todos.filter(x=>x.id!==t.id); save(); });
 }
@@ -1579,8 +1609,7 @@ function renderBoard(items){
   document.getElementById('board').innerHTML = keys.map(g=>`<div class="bcol" data-group="${esc(g)}"><h4><span class="chip q">${esc(g)}</span><span class="cnt">${groups[g].length}</span></h4>
     ${groups[g].sort((a,b)=>(a.start||'9').localeCompare(b.start||'9')).map(c=>`<div class="bcard ${c.done?'done':''}" data-id="${c.id}" draggable="true">
       <div class="t">${esc(c.name)}</div>
-      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}</div>
-      ${(c.notes||[]).length?`<div class="n">${c.notes.map(n=>fmtNote(n)).join('<br>')}</div>`:''}
+      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}</div>
     </div>`).join('') || '<div class="empty" style="padding:14px 6px">비어 있음</div>'}</div>`).join('');
 }
 const fmtH = h => Math.round(h).toLocaleString('ko-KR') + 'h';
@@ -1605,43 +1634,41 @@ function fmtNote(n){
   return h;
 }
 function calDialogCenter(c, presetDate){
-  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], designer:'', rms:''};
   openDialog(isNew?'일정 추가':'일정 수정', `
     <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
-    <div class="fs"><div class="f"><label for="f_start">마감일 (시작)</label><input type="date" id="f_start" value="${c.start||''}"></div>
-    <div class="f"><label for="f_end">종료일 (기간일 때만)</label><input type="date" id="f_end" value="${c.end||''}"></div></div>
-    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div>
-    <div class="f"><label for="f_quad">4분면 시간 관리법</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div></div>
-    <div class="fs"><div class="f"><label for="f_time">시간</label><input type="text" id="f_time" value="${esc(c.time)}" placeholder="예: 10:30 ~"></div>
-    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
-    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" style="min-height:110px">${esc((c.notes||[]).join('\n'))}</textarea></div>
+    <div class="fs"><div class="f"><label for="f_start">마감일</label><input type="date" id="f_start" value="${c.start||''}"></div>
+    <div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div></div>
+    <div class="fs"><div class="f"><label for="f_quad">4분면</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div>
+    <div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,c.designer)}</select></div></div>
+    <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(c.rms||'')}"></div>
+    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><div class="input-with-hint"><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
+    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" class="auto-height">${esc((c.notes||[]).join('\n'))}</textarea></div>
     <div class="f"><label class="chk"><input type="checkbox" id="f_done" ${c.done?'checked':''}> 완료</label></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const start=$v('f_start'), end=$v('f_end');
-      if(end && start && end<start){ alert('종료일이 시작일보다 빠릅니다'); return false; }
-      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:(end&&end!==start)?end:'', status:$v('f_status'), quad:$v('f_quad'), time:$v('f_time'), hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
-        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked };
+      const start=$v('f_start');
+      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:'', status:$v('f_status'), quad:$v('f_quad'), time:'', hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
+        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked, designer:$v('f_designer'), rms:$v('f_rms') };
       if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
       if(start) calYM = start.slice(0,7); save(); },
     isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); }, 'center');
 }
 function calDialog(c, presetDate){
-  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], designer:'', rms:''};
   openDialog(isNew?'일정 추가':'일정 수정', `
     <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
-    <div class="fs"><div class="f"><label for="f_start">마감일 (시작)</label><input type="date" id="f_start" value="${c.start||''}"></div>
-    <div class="f"><label for="f_end">종료일 (기간일 때만)</label><input type="date" id="f_end" value="${c.end||''}"></div></div>
-    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div>
-    <div class="f"><label for="f_quad">4분면 시간 관리법</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div></div>
-    <div class="fs"><div class="f"><label for="f_time">시간</label><input type="text" id="f_time" value="${esc(c.time)}" placeholder="예: 10:30 ~"></div>
-    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
-    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" style="min-height:110px">${esc((c.notes||[]).join('\n'))}</textarea></div>
+    <div class="fs"><div class="f"><label for="f_start">마감일</label><input type="date" id="f_start" value="${c.start||''}"></div>
+    <div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div></div>
+    <div class="fs"><div class="f"><label for="f_quad">4분면</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div>
+    <div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,c.designer)}</select></div></div>
+    <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(c.rms||'')}"></div>
+    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><div class="input-with-hint"><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
+    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" class="auto-height">${esc((c.notes||[]).join('\n'))}</textarea></div>
     <div class="f"><label class="chk"><input type="checkbox" id="f_done" ${c.done?'checked':''}> 완료</label></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const start=$v('f_start'), end=$v('f_end');
-      if(end && start && end<start){ alert('종료일이 시작일보다 빠릅니다'); return false; }
-      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:(end&&end!==start)?end:'', status:$v('f_status'), quad:$v('f_quad'), time:$v('f_time'), hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
-        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked };
+      const start=$v('f_start');
+      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:'', status:$v('f_status'), quad:$v('f_quad'), time:'', hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
+        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked, designer:$v('f_designer'), rms:$v('f_rms') };
       if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
       if(start) calYM = start.slice(0,7); save(); },
     isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); });

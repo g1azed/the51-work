@@ -68,6 +68,8 @@ function todoHTML(t, compact=false){
       <div class="meta">
         <span class="chip s-${esc(t.status)}">${esc(t.status)}</span>
         ${(t.tags||[]).map(x=>`<span class="chip t-${esc(x)}">${esc(x)}</span>`).join('')}
+        ${t.designer ? `<span class="chip designer">[${esc(t.designer)}]</span>` : ''}
+        ${t.rms ? `<a href="${esc(t.rms)}" class="chip rms" target="_blank">[RMS]</a>` : ''}
         ${dueChip(t.date, done)}
         ${(!compact && p) ? `<span class="chip rel">${esc(p.name)}</span>` : ''}
       </div>
@@ -158,6 +160,15 @@ function openDialog(title, bodyHTML, onSave, onDelete, position='right'){
   modal.classList.add('on');
   if(position==='center') document.getElementById('overlay').classList.add('on');
   const first = modal.querySelector('input,textarea,select'); if(first) first.focus();
+  setupAutoHeight();
+}
+function setupAutoHeight(){
+  const textareas = document.querySelectorAll('textarea.auto-height');
+  textareas.forEach(ta => {
+    const adjust = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    adjust();
+    ta.addEventListener('input', adjust);
+  });
 }
 function closeDialog(shouldSave=true){
   if(shouldSave && dlg && dlg.onSave){
@@ -173,18 +184,20 @@ document.getElementById('dlgDelete').onclick = ()=>{ if(dlg && dlg.onDelete && c
 modal.addEventListener('click', e=>{ if(e.target===modal) closeDialog(true); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && modal.classList.contains('on')) closeDialog(true); });
 const $v = id => document.getElementById(id).value.trim();
-const optHTML = (arr, sel) => arr.map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
+const optHTML = (arr, sel) => (arr||[]).map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
 
 function todoDialog(t){
-  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:''};
+  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:'',designer:'',rms:''};
   openDialog(isNew?'할 일 추가':'할 일 수정', `
     <div class="f"><label for="f_name">이름</label><textarea id="f_name" rows="2">${esc(t.name)}</textarea></div>
     <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status">${optHTML(DB.options.status,t.status)}</select></div>
     <div class="f"><label for="f_date">일자</label><input type="date" id="f_date" value="${t.date||''}"></div></div>
     <div class="f"><label>태그</label><div class="tagrow">${DB.options.tags.map(x=>`<label><input type="checkbox" name="f_tag" value="${esc(x)}" ${(t.tags||[]).includes(x)?'checked':''}> ${esc(x)}</label>`).join('')}</div></div>
+    <div class="fs"><div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,t.designer)}</select></div>
+    <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(t.rms||'')}"></div></div>
     <div class="f"><label for="f_proj">관련 프로젝트</label><select id="f_proj"><option value="">(없음)</option>${DB.projects.map(p=>`<option value="${p.id}" ${p.id===t.project?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value)};
+      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value), designer:$v('f_designer'), rms:$v('f_rms')};
       if(isNew) DB.todos.push(obj); else Object.assign(DB.todos.find(x=>x.id===t.id), obj); save(); },
     isNew?null:()=>{ DB.todos = DB.todos.filter(x=>x.id!==t.id); save(); });
 }
@@ -358,8 +371,7 @@ function renderBoard(items){
   document.getElementById('board').innerHTML = keys.map(g=>`<div class="bcol" data-group="${esc(g)}"><h4><span class="chip q">${esc(g)}</span><span class="cnt">${groups[g].length}</span></h4>
     ${groups[g].sort((a,b)=>(a.start||'9').localeCompare(b.start||'9')).map(c=>`<div class="bcard ${c.done?'done':''}" data-id="${c.id}" draggable="true">
       <div class="t">${esc(c.name)}</div>
-      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}</div>
-      ${(c.notes||[]).length?`<div class="n">${c.notes.map(n=>fmtNote(n)).join('<br>')}</div>`:''}
+      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}</div>
     </div>`).join('') || '<div class="empty" style="padding:14px 6px">비어 있음</div>'}</div>`).join('');
 }
 const fmtH = h => Math.round(h).toLocaleString('ko-KR') + 'h';
@@ -384,43 +396,41 @@ function fmtNote(n){
   return h;
 }
 function calDialogCenter(c, presetDate){
-  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], designer:'', rms:''};
   openDialog(isNew?'일정 추가':'일정 수정', `
     <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
-    <div class="fs"><div class="f"><label for="f_start">마감일 (시작)</label><input type="date" id="f_start" value="${c.start||''}"></div>
-    <div class="f"><label for="f_end">종료일 (기간일 때만)</label><input type="date" id="f_end" value="${c.end||''}"></div></div>
-    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div>
-    <div class="f"><label for="f_quad">4분면 시간 관리법</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div></div>
-    <div class="fs"><div class="f"><label for="f_time">시간</label><input type="text" id="f_time" value="${esc(c.time)}" placeholder="예: 10:30 ~"></div>
-    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
-    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" style="min-height:110px">${esc((c.notes||[]).join('\n'))}</textarea></div>
+    <div class="fs"><div class="f"><label for="f_start">마감일</label><input type="date" id="f_start" value="${c.start||''}"></div>
+    <div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div></div>
+    <div class="fs"><div class="f"><label for="f_quad">4분면</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div>
+    <div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,c.designer)}</select></div></div>
+    <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(c.rms||'')}"></div>
+    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><div class="input-with-hint"><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
+    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" class="auto-height">${esc((c.notes||[]).join('\n'))}</textarea></div>
     <div class="f"><label class="chk"><input type="checkbox" id="f_done" ${c.done?'checked':''}> 완료</label></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const start=$v('f_start'), end=$v('f_end');
-      if(end && start && end<start){ alert('종료일이 시작일보다 빠릅니다'); return false; }
-      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:(end&&end!==start)?end:'', status:$v('f_status'), quad:$v('f_quad'), time:$v('f_time'), hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
-        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked };
+      const start=$v('f_start');
+      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:'', status:$v('f_status'), quad:$v('f_quad'), time:'', hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
+        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked, designer:$v('f_designer'), rms:$v('f_rms') };
       if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
       if(start) calYM = start.slice(0,7); save(); },
     isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); }, 'center');
 }
 function calDialog(c, presetDate){
-  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[]};
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], designer:'', rms:''};
   openDialog(isNew?'일정 추가':'일정 수정', `
     <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
-    <div class="fs"><div class="f"><label for="f_start">마감일 (시작)</label><input type="date" id="f_start" value="${c.start||''}"></div>
-    <div class="f"><label for="f_end">종료일 (기간일 때만)</label><input type="date" id="f_end" value="${c.end||''}"></div></div>
-    <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div>
-    <div class="f"><label for="f_quad">4분면 시간 관리법</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div></div>
-    <div class="fs"><div class="f"><label for="f_time">시간</label><input type="text" id="f_time" value="${esc(c.time)}" placeholder="예: 10:30 ~"></div>
-    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
-    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" style="min-height:110px">${esc((c.notes||[]).join('\n'))}</textarea></div>
+    <div class="fs"><div class="f"><label for="f_start">마감일</label><input type="date" id="f_start" value="${c.start||''}"></div>
+    <div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div></div>
+    <div class="fs"><div class="f"><label for="f_quad">4분면</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div>
+    <div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,c.designer)}</select></div></div>
+    <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(c.rms||'')}"></div>
+    <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><div class="input-with-hint"><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
+    <div class="f"><label for="f_notes">메모 (한 줄에 하나 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" class="auto-height">${esc((c.notes||[]).join('\n'))}</textarea></div>
     <div class="f"><label class="chk"><input type="checkbox" id="f_done" ${c.done?'checked':''}> 완료</label></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const start=$v('f_start'), end=$v('f_end');
-      if(end && start && end<start){ alert('종료일이 시작일보다 빠릅니다'); return false; }
-      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:(end&&end!==start)?end:'', status:$v('f_status'), quad:$v('f_quad'), time:$v('f_time'), hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
-        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked };
+      const start=$v('f_start');
+      const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:'', status:$v('f_status'), quad:$v('f_quad'), time:'', hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
+        notes:document.getElementById('f_notes').value.split('\n').map(s=>s.trim()).filter(Boolean), done:document.getElementById('f_done').checked, designer:$v('f_designer'), rms:$v('f_rms') };
       if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
       if(start) calYM = start.slice(0,7); save(); },
     isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); });

@@ -8,7 +8,8 @@ const SEED = {
   options: {
     related: ['LGU+', 'LG_Battery_Lifecare', '암웨이것모닝', '관련 업체 혹은 업무 종류 라벨링'],
     status: ['대기','보류','진행','검토','완료','취소','없음'],
-    tags: ['중요','긴급']
+    tags: ['중요','긴급'],
+    designers: ['백은주책임님','유선우책임님','하나경책임님','손지민선임님','이하람수석님','도현진책임님','박하나차장님','전한비선임님','권지수선임님','이하영선임님','김채린선임님','이지선책임님']
   },
   projects: [
     { id:'p1', name:'2026 성과 목표', related:'', status:'진행', date:'2026-03-01', memo:'' },
@@ -17,11 +18,11 @@ const SEED = {
     { id:'p4', name:'것모닝', related:'암웨이것모닝', status:'완료', date:'2025-08-18', memo:'' }
   ],
   todos: [
-    { id:'t1', name:'vue / scss 학습\n- vue3 기초문법 강의 다시\n- swiper 적용\n- scss 생각하면서 스타일링 적용', tags:[], date:'', status:'완료', project:'' },
-    { id:'t2', name:'scss', tags:[], date:'', status:'완료', project:'' },
-    { id:'t3', name:'다이소 구매', tags:[], date:'', status:'완료', project:'' },
-    { id:'t4', name:'Vuetify 연습하며 정리', tags:[], date:'', status:'완료', project:'' },
-    { id:'t5', name:'(제목 없음)', tags:[], date:'2025-08-12', status:'진행', project:'p2' }
+    { id:'t1', name:'vue / scss 학습\n- vue3 기초문법 강의 다시\n- swiper 적용\n- scss 생각하면서 스타일링 적용', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t2', name:'scss', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t3', name:'다이소 구매', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t4', name:'Vuetify 연습하며 정리', tags:[], date:'', status:'완료', project:'', designer:'', rms:'' },
+    { id:'t5', name:'(제목 없음)', tags:[], date:'2025-08-12', status:'진행', project:'p2', designer:'', rms:'' }
   ],
   notes: [
     { id:'n1', title:'회사 전용 이메일', body:'sjhong@the-51.com' },

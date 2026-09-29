@@ -4,6 +4,6 @@ SEED.options.quad = ['작업중','디자인~ing','퍼블리싱 완료 후 검토
 SEED.cal = [];
 const M = SEED.months;
 function E(date, log, memo){ return { id:'j'+date.replace(/-/g,''), date, log:clean(log||''), memo:clean(memo||'') }; }
-function T(nid, name, start, end, status, quad, done, time, who, notes){
-  SEED.cal.push({ id:'c'+nid, nid, name:clean(name), start:start||'', end:end||'', status:status||'', quad:quad||'', done:!!done, time:time||'', who:who||[], notes:(notes||[]).map(clean) });
+function T(nid, name, start, end, status, quad, done, time, who, notes, designer='', rms=''){
+  SEED.cal.push({ id:'c'+nid, nid, name:clean(name), start:start||'', end:end||'', status:status||'', quad:quad||'', done:!!done, time:time||'', who:who||[], notes:(notes||[]).map(clean), designer:designer||'', rms:rms||'' });
 }
