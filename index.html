@@ -189,9 +189,9 @@ table.j tr:hover .ops .btn{opacity:1}
 .bcard{cursor:grab}
 .bcard.dragging{opacity:.4;cursor:grabbing}
 .bcol.over{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:-2px}
-.bcard .t{font-weight:600;word-break:break-word}
+.bcard .t{font-weight:600;word-break:break-word; margin-top: 8px;}
 .bcard.done .t{text-decoration:line-through;color:var(--muted);font-weight:500}
-.bcard .m{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.bcard .m{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
 .bcard .n{color:var(--muted);font-size:11.5px;margin-top:3px;white-space:pre-wrap;word-break:break-all}
 .bcard .n s{opacity:.6}
 #view-cal.on{display:grid;grid-template-columns:1fr 1fr;gap:24px}
@@ -790,8 +790,9 @@ function renderBoard(items){
   renderHours(list);
   document.getElementById('board').innerHTML = keys.map(g=>`<div class="bcol" data-group="${esc(g)}"><h4><span class="chip q">${esc(g)}</span><span class="cnt">${groups[g].length}</span></h4>
     ${groups[g].sort((a,b)=>(a.start||'9').localeCompare(b.start||'9')).map(c=>`<div class="bcard ${c.done?'done':''}" data-id="${c.id}" draggable="true">
+      ${(c.start||c.time||c.hours!=null)?`<div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}</div>`:''}
       <div class="t">${esc(c.name)}</div>
-      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}</div>
+      ${(c.rms||c.status||c.designer)?`<div class="m">${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}</div>`:''}
     </div>`).join('') || '<div class="empty" style="padding:14px 6px">비어 있음</div>'}</div>`).join('');
 }
 const fmtH = h => Math.round(h).toLocaleString('ko-KR') + 'h';

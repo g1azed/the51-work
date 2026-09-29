@@ -374,8 +374,9 @@ function renderBoard(items){
   renderHours(list);
   document.getElementById('board').innerHTML = keys.map(g=>`<div class="bcol" data-group="${esc(g)}"><h4><span class="chip q">${esc(g)}</span><span class="cnt">${groups[g].length}</span></h4>
     ${groups[g].sort((a,b)=>(a.start||'9').localeCompare(b.start||'9')).map(c=>`<div class="bcard ${c.done?'done':''}" data-id="${c.id}" draggable="true">
+      ${(c.start||c.time||c.hours!=null)?`<div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}</div>`:''}
       <div class="t">${esc(c.name)}</div>
-      <div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}</div>
+      ${(c.rms||c.status||c.designer)?`<div class="m">${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}</div>`:''}
     </div>`).join('') || '<div class="empty" style="padding:14px 6px">비어 있음</div>'}</div>`).join('');
 }
 const fmtH = h => Math.round(h).toLocaleString('ko-KR') + 'h';
