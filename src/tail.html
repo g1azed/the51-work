@@ -240,8 +240,14 @@ document.getElementById('dlgBody').addEventListener('click', e=>{
 // ================== 이벤트 ==================
 document.querySelector('.top nav').addEventListener('click', e=>{
   const b=e.target.closest('button[data-view]'); if(!b) return;
-  document.querySelectorAll('.top nav button').forEach(x=>x.classList.toggle('on',x===b));
-  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id==='view-'+b.dataset.view));
+  document.querySelectorAll('.top nav button').forEach(x=>{
+    if(x===b) x.classList.add('on');
+    else x.classList.remove('on');
+  });
+  document.querySelectorAll('.view').forEach(v=>{
+    if(v.id==='view-'+b.dataset.view) v.classList.add('on');
+    else v.classList.remove('on');
+  });
   try{ localStorage.setItem(KEY+':view', b.dataset.view); }catch(e){}
 });
 document.getElementById('addTodo').onclick = ()=>todoDialog();
