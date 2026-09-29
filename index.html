@@ -1249,7 +1249,7 @@ function load(){
 function migrate(){
   // v1 저장본에 캘린더/과거 일지가 없으면 시드에서 보충
   if(!DB.cal){ DB.cal = JSON.parse(JSON.stringify(SEED.cal)); }
-  ['calStatus','quad'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
+  ['calStatus','quad','designers'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
   DB.options.quad = [...QUADS];
   DB.cal.forEach(c=>{ if(QUAD_MIGRATE[c.quad]) c.quad = QUAD_MIGRATE[c.quad]; });
   SEED.months.forEach(sm=>{ if(!DB.months.find(m=>m.key===sm.key)) DB.months.push(JSON.parse(JSON.stringify(sm))); });
