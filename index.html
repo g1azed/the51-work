@@ -1593,11 +1593,9 @@ function renderCal(){
     const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const other = dayNum<1 || dayNum>daysInMonth;
     const evs = items.filter(c=>inRange(c, ds)).sort((a,b)=>(a.status||'~').localeCompare(b.status||'~'));
-    const shown = evs.slice(0,4);
     html += `<div class="cell ${other?'other':''} ${ds===t?'today':''} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''}" data-date="${ds}">
       <span class="dn">${d.getDate()}</span>
-      ${shown.map(c=>`<span class="ev ${c.done?'done':''} ${c.status?'c-'+stColor(c.status):'off'}" data-id="${c.id}" draggable="true" title="${esc(c.name)}${c.status?' · '+esc(c.status):''}">${c.time?'<b>'+esc(c.time)+'</b> ':''}${esc(c.name)}</span>`).join('')}
-      ${evs.length>4?`<span class="more">+${evs.length-4}개 더</span>`:''}
+      ${evs.map(c=>`<span class="ev ${c.done?'done':''} ${c.status?'c-'+stColor(c.status):'off'}" data-id="${c.id}" draggable="true" title="${esc(c.name)}${c.status?' · '+esc(c.status):''}">${c.time?'<b>'+esc(c.time)+'</b> ':''}${esc(c.name)}</span>`).join('')}
     </div>`;
   }
   document.getElementById('calGrid').innerHTML = html;
