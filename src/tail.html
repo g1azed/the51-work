@@ -113,7 +113,14 @@ function renderNotes(){
   document.getElementById('noteList').innerHTML = DB.notes.length ? DB.notes.map(n=>`<div class="note" data-id="${n.id}">
     <h3>${esc(n.title)}</h3><pre>${esc(n.body)}</pre>
     <div class="act"><button class="btn sm ghost" data-act="edit" aria-label="수정">✎</button></div></div>`).join('') : '<div class="empty">메모가 없습니다</div>';
+  layoutNotes();
 }
+// 노트 벽돌형 배치: 각 노트 높이(+아래 여백)만큼 4px 행을 차지하게 해서 빈칸 없이 위로 채움
+function layoutNotes(){
+  const box = document.getElementById('noteList');
+  [...box.children].forEach(n=>{ n.style.gridRowEnd = `span ${Math.max(1, Math.ceil((n.getBoundingClientRect().height + 10) / 4))}`; });
+}
+new ResizeObserver(layoutNotes).observe(document.getElementById('noteList')); // 화면 크기 변경·대시보드 전환 시 다시 계산
 let openMonths = null;
 function fmtLog(s, q){
   let h = esc(s)
@@ -278,6 +285,21 @@ function handleTodoClick(e){
 document.getElementById('noteList').addEventListener('click', e=>{
   const n = e.target.closest('.note'); if(!n) return;
   if(e.target.closest('[data-act=edit]')) noteDialog(DB.notes.find(x=>x.id===n.dataset.id));
+});
+// 노트 드래그로 순서 변경 — 놓은 노트 자리로 이동 (순서는 options._noteOrder 로 동기화)
+const noteListEl = document.getElementById('noteList');
+let noteDragId = null;
+// 제목(h3)을 잡았을 때만 드래그 가능 — 본문은 텍스트 선택 그대로
+noteListEl.addEventListener('mousedown', e=>{ const n=e.target.closest('.note'); if(n) n.draggable = !!e.target.closest('h3'); });
+noteListEl.addEventListener('dragstart', e=>{ const n=e.target.closest?.('.note'); if(!n || !n.draggable) return; noteDragId=n.dataset.id; n.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', noteDragId); });
+noteListEl.addEventListener('dragend', ()=>{ noteDragId=null; noteListEl.querySelectorAll('.note').forEach(x=>{ x.classList.remove('dragging','over'); x.draggable=false; }); });
+noteListEl.addEventListener('dragover', e=>{ const n=e.target.closest('.note'); if(!n||!noteDragId) return; e.preventDefault(); e.dataTransfer.dropEffect='move'; noteListEl.querySelectorAll('.note.over').forEach(x=>{ if(x!==n) x.classList.remove('over'); }); if(n.dataset.id!==noteDragId) n.classList.add('over'); });
+noteListEl.addEventListener('dragleave', e=>{ const n=e.target.closest('.note'); if(n && !n.contains(e.relatedTarget)) n.classList.remove('over'); });
+noteListEl.addEventListener('drop', e=>{
+  const n=e.target.closest('.note'); if(!n||!noteDragId) return; e.preventDefault();
+  const from = DB.notes.findIndex(x=>x.id===noteDragId), to = DB.notes.findIndex(x=>x.id===n.dataset.id);
+  if(from<0 || to<0 || from===to) return;
+  DB.notes.splice(to, 0, DB.notes.splice(from, 1)[0]); save(false); toast('노트 순서 변경됨');
 });
 
 // 업무일지
@@ -577,6 +599,7 @@ function toRows(db){
   const r = {};
   r.options = Object.entries(db.options||{}).map(([key,values])=>({key, values}));
   r.options.push({key:'_months', values:(db.months||[]).map(m=>m.key).sort()}); // 빈 달도 보존
+  r.options.push({key:'_noteOrder', values:(db.notes||[]).map(n=>n.id)});       // 드래그로 바꾼 노트 순서
   r.projects = (db.projects||[]).map(p=>({id:p.id, name:p.name||'', related:p.related||'', status:p.status||'', date:nz(p.date), memo:p.memo||''}));
   r.todos = (db.todos||[]).map(t=>({id:t.id, name:t.name||'', tags:t.tags||[], date:nz(t.date), status:t.status||'', project_id:t.project||'', designer:t.designer||'', rms:t.rms||''}));
   r.notes = (db.notes||[]).map(n=>({id:n.id, title:n.title||'', body:n.body||''}));
@@ -589,7 +612,9 @@ const idRank = id => { const m=/^[a-z]{1,2}(\d{1,5})$/.exec(id); return m ? [0,+
 const byId = (a,b) => { const x=idRank(a.id), y=idRank(b.id); return (x[0]-y[0]) || (x[1]-y[1]) || (x[2]<y[2]?-1:x[2]>y[2]?1:0); };
 function fromRows(R){
   const options = {}; let monthKeys = [];
-  R.options.forEach(o=>{ if(o.key==='_months') monthKeys=o.values||[]; else options[o.key]=o.values; });
+  let noteOrder = [];
+  R.options.forEach(o=>{ if(o.key==='_months') monthKeys=o.values||[]; else if(o.key==='_noteOrder') noteOrder=o.values||[]; else options[o.key]=o.values; });
+  const noteRank = n => { const i=noteOrder.indexOf(n.id); return i<0 ? Infinity : i; }; // 순서에 없는 노트는 뒤로
   const by = {};
   R.work_logs.forEach(w=>{ (by[w.month_key]=by[w.month_key]||[]).push({id:w.id, date:ds(w.date), log:w.log, memo:w.memo}); });
   monthKeys.forEach(k=>{ if(!by[k]) by[k]=[]; });
@@ -598,7 +623,7 @@ function fromRows(R){
     version:1, options,
     projects: R.projects.slice().sort(byId).map(p=>({id:p.id, name:p.name, related:p.related, status:p.status, date:ds(p.date), memo:p.memo})),
     todos: R.todos.slice().sort(byId).map(t=>({id:t.id, name:t.name, tags:t.tags||[], date:ds(t.date), status:t.status, project:t.project_id, designer:t.designer, rms:t.rms})),
-    notes: R.notes.slice().sort(byId).map(n=>({id:n.id, title:n.title, body:n.body})),
+    notes: R.notes.slice().sort((a,b)=>(noteRank(a)-noteRank(b))||byId(a,b)).map(n=>({id:n.id, title:n.title, body:n.body})),
     months,
     cal: R.calendar_items.slice().sort(byId).map(c=>({id:c.id, nid:c.nid, name:c.name, start:ds(c.start_date), end:ds(c.end_date), status:c.status, quad:c.quad, done:!!c.done, time:c.time, hours:c.hours, designer:c.designer, rms:c.rms, who:c.who||[], notes:c.notes||[]})),
     updatedAt: new Date().toISOString()
