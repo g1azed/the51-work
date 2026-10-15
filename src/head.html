@@ -189,9 +189,9 @@ table.j tr:hover .ops .btn{opacity:1}
 .bcard{cursor:grab}
 .bcard.dragging{opacity:.4;cursor:grabbing}
 .bcol.over{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:-2px}
-.bcard .t{font-weight:600;word-break:break-word}
+.bcard .t{font-weight:600;word-break:break-word; margin-top: 8px;}
 .bcard.done .t{text-decoration:line-through;color:var(--muted);font-weight:500}
-.bcard .m{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.bcard .m{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
 .bcard .n{color:var(--muted);font-size:11.5px;margin-top:3px;white-space:pre-wrap;word-break:break-all}
 .bcard .n s{opacity:.6}
 #view-cal.on{display:grid;grid-template-columns:1fr 1fr;gap:24px}
@@ -246,7 +246,7 @@ table.hours tfoot td.md{color:var(--accent-ink)}
 .dlg .f label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
 .dlg .f input[type=text],.dlg .f input[type=date],.dlg .f input[type=url],.dlg .f select,.dlg .f textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
 .dlg .f textarea{min-height:90px;resize:vertical}
-.dlg .f textarea.auto-height{min-height:60px;max-height:none;resize:none;overflow:hidden}
+.dlg .f textarea.auto-height{min-height:60px;max-height:none;resize:none;overflow:hidden;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .dlg .f .input-with-hint{display:flex;align-items:center;gap:8px}
 .dlg .f .input-with-hint input{flex:1}
 .dlg .f .input-with-hint .hint{flex-shrink:0;white-space:nowrap}
@@ -255,7 +255,7 @@ table.hours tfoot td.md{color:var(--accent-ink)}
 .dlg .foot{display:flex;gap:6px;padding:14px 20px;border-top:1px solid var(--line);justify-content:flex-end;flex-shrink:0}
 .dlg .foot .left{margin-right:auto}
 .dlg .fs{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
-.hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+.hint{font-size:11.5px;color:var(--muted);margin-left: 40px;}
 .opt-list{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .opt-list .chip{cursor:default}
 .opt-list .chip button{border:0;background:transparent;padding:0;line-height:1;color:inherit;opacity:.6}
@@ -353,7 +353,6 @@ mark{background:#fff3b0;padding:0 1px;border-radius:2px}
   <div class="list-h">
     <h3>작업시간</h3>
     <span id="hoursCnt" style="font-size:12px;color:var(--muted)"></span>
-    <span style="flex:1"></span>
     <span class="hint">표의 작업시간 칸에 바로 입력할 수 있습니다 (1시간 단위) · 1시간 = 0.125 MD</span>
   </div>
   <div class="panel" style="overflow-x:auto">
