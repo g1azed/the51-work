@@ -5,7 +5,7 @@
 -- ── 옵션(상태/태그/연관/기획자 목록) ─────────────────────────────
 create table if not exists options (
   user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  key        text not null,              -- related | status | tags | calStatus | quad | who
+  key        text not null,              -- related | status | tags | calStatus | quad | planner
   "values"   jsonb not null default '[]',
   updated_at timestamptz not null default now(),
   primary key (user_id, key)
@@ -108,9 +108,22 @@ end $$;
 
 -- ── 2026-09-29 14:40 추가: 앱에서 쓰는 필드(기획자/RMS/작업시간) 컬럼 ─────
 -- 이미 위 내용을 실행했어도 이 파일 전체를 다시 Run 해도 안전합니다(전부 "if not exists").
-alter table todos          add column if not exists designer text not null default '';
+-- ── 2026-11-11 추가: 기획자 컬럼 이름 변경 designer → planner ─────────────
+-- 예전 designer 컬럼이 있으면 값은 그대로 두고 이름만 바꿉니다. 이미 바꿨다면 아무 일도 하지 않습니다.
+do $$
+declare t text;
+begin
+  foreach t in array array['todos','calendar_items'] loop
+    if exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = t and column_name = 'designer')
+       and not exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = t and column_name = 'planner') then
+      execute format('alter table %I rename column designer to planner', t);
+    end if;
+  end loop;
+end $$;
+
+alter table todos          add column if not exists planner  text not null default '';
 alter table todos          add column if not exists rms      text not null default '';
 alter table calendar_items add column if not exists hours    integer;
-alter table calendar_items add column if not exists designer text not null default '';
+alter table calendar_items add column if not exists planner  text not null default '';
 alter table calendar_items add column if not exists rms      text not null default '';
 notify pgrst, 'reload schema';

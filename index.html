@@ -67,7 +67,7 @@ main{max-width:1400px;margin:0 auto;padding:20px 24px 80px}
 .chip.s-없음{background:var(--gray-soft);color:var(--muted)}
 .chip.t-중요{background:var(--red-soft);color:var(--red)} .chip.t-긴급{background:var(--green-soft);color:var(--green)}
 .chip.rel{background:var(--blue-soft);color:var(--blue)}
-.chip.designer{background:var(--purple-soft);color:var(--purple)}
+.chip.planner{background:var(--purple-soft);color:var(--purple)}
 .chip.rms{background:var(--blue-soft);color:var(--blue);text-decoration:none;cursor:pointer}
 .chip.rms:hover{filter:brightness(.95)}
 .chip.due{background:var(--gray-soft);color:var(--muted);font-weight:500}
@@ -416,7 +416,7 @@ const SEED = {
     related: ['LGU+', 'LG_Battery_Lifecare', '암웨이것모닝', '관련 업체 혹은 업무 종류 라벨링'],
     status: ['대기','보류','진행','검토','완료','취소','없음'],
     tags: ['중요','긴급'],
-    designers: ['백은주책임님','유선우책임님','하나경책임님','손지민선임님','이하람수석님','도현진책임님','박하나차장님','전한비선임님','권지수선임님','이하영선임님','김채린선임님','이지선책임님'],
+    planner: ['백은주책임님','유선우책임님','하나경책임님','손지민선임님','이하람수석님','도현진책임님','박하나차장님','전한비선임님','권지수선임님','이하영선임님','김채린선임님','이지선책임님'],
     calStatus: ['우선순위 1','우선순위 2','추후업무','분류대기','업무보류','제작완료','fixed','사업검수중','반영대기','반영완료'],
     quad: ['작업중','대기','반영대기','추후작업']
   },
@@ -440,7 +440,11 @@ function migrate(){
   // 누락된 필드/옵션 기본값 보충 (데이터 자체는 Supabase 에서 옴)
   ['projects','todos','notes','months','cal'].forEach(k=>{ if(!Array.isArray(DB[k])) DB[k] = []; });
   if(!DB.options) DB.options = {};
-  ['related','status','tags','calStatus','quad','designers'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
+  // 기획자 목록 키 이름 변경: designers → planner (예전 데이터는 그대로 옮김)
+  if(DB.options['designers']){ if(!DB.options.planner) DB.options.planner = DB.options['designers']; delete DB.options['designers']; }
+  // 할 일·일정의 기획자 필드 이름 변경: designer → planner
+  [...DB.todos, ...DB.cal].forEach(x=>{ if('designer' in x){ if(!x.planner) x.planner = x['designer'] || ''; delete x['designer']; } });
+  ['related','status','tags','calStatus','quad','planner'].forEach(k=>{ if(!DB.options[k]) DB.options[k] = [...SEED.options[k]]; });
   DB.options.quad = [...QUADS];
   DB.cal.forEach(c=>{ if(QUAD_MIGRATE[c.quad]) c.quad = QUAD_MIGRATE[c.quad]; });
 }
@@ -496,7 +500,7 @@ function todoHTML(t, compact=false){
       <div class="meta">
         <span class="chip s-${esc(t.status)}">${esc(t.status)}</span>
         ${(t.tags||[]).map(x=>`<span class="chip t-${esc(x)}">${esc(x)}</span>`).join('')}
-        ${t.designer ? `<span class="chip designer">[${esc(t.designer)}]</span>` : ''}
+        ${t.planner ? `<span class="chip planner">[${esc(t.planner)}]</span>` : ''}
         ${t.rms ? `<a href="${esc(t.rms)}" class="chip rms" target="_blank">[RMS]</a>` : ''}
         ${dueChip(t.date, done)}
         ${(!compact && p) ? `<span class="chip rel">${esc(p.name)}</span>` : ''}
@@ -622,17 +626,17 @@ const $v = id => document.getElementById(id).value.trim();
 const optHTML = (arr, sel) => (arr||[]).map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
 
 function todoDialog(t){
-  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:'',designer:'',rms:''};
+  const isNew = !t; t = t || {name:'',tags:[],date:'',status:'대기',project:'',planner:'',rms:''};
   openDialog(isNew?'할 일 추가':'할 일 수정', `
     <div class="f"><label for="f_name">이름</label><textarea id="f_name" rows="2">${esc(t.name)}</textarea></div>
     <div class="fs"><div class="f"><label for="f_status">상태</label><select id="f_status">${optHTML(DB.options.status,t.status)}</select></div>
     <div class="f"><label for="f_date">일자</label><input type="date" id="f_date" value="${t.date||''}"></div></div>
     <div class="f"><label>태그</label><div class="tagrow">${DB.options.tags.map(x=>`<label><input type="checkbox" name="f_tag" value="${esc(x)}" ${(t.tags||[]).includes(x)?'checked':''}> ${esc(x)}</label>`).join('')}</div></div>
-    <div class="fs"><div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,t.designer)}</select></div>
+    <div class="fs"><div class="f"><label for="f_planner">기획자</label><select id="f_planner"><option value="">(없음)</option>${optHTML(DB.options.planner,t.planner)}</select></div>
     <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(t.rms||'')}"></div></div>
     <div class="f"><label for="f_proj">관련 프로젝트</label><select id="f_proj"><option value="">(없음)</option>${DB.projects.map(p=>`<option value="${p.id}" ${p.id===t.project?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`,
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
-      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value), designer:$v('f_designer'), rms:$v('f_rms')};
+      const obj = {id:t.id||uid(), name, status:$v('f_status'), date:$v('f_date'), project:$v('f_proj'), tags:[...document.querySelectorAll('[name=f_tag]:checked')].map(c=>c.value), planner:$v('f_planner'), rms:$v('f_rms')};
       if(isNew) DB.todos.push(obj); else Object.assign(DB.todos.find(x=>x.id===t.id), obj); save(); },
     isNew?null:()=>{ DB.todos = DB.todos.filter(x=>x.id!==t.id); save(); });
 }
@@ -662,7 +666,7 @@ function noteDialog(n){
 function optionsDialog(){
   const sec = (key,label) => `<div class="f"><label>${label}</label><div class="opt-list" data-key="${key}">${DB.options[key].map(o=>`<span class="chip rel">${esc(o)} <button data-act="rmopt" data-key="${key}" data-val="${esc(o)}" aria-label="삭제">✕</button></span>`).join('')}</div>
     <div style="display:flex;gap:6px"><input type="text" id="opt_${key}" placeholder="새 항목" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:6px 10px"><button class="btn sm" data-act="addopt" data-key="${key}">추가</button></div></div>`;
-  openDialog('옵션 관리', sec('related','연관 (업체/업무 종류)') + sec('status','상태 (To do / Projects)') + sec('tags','태그') + sec('calStatus','캘린더 일정 상태') + `<div class="f hint">상태는 대기·보류 → 진행·검토 → 완료·취소·없음 순으로 정렬되며, 완료/취소/없음은 완료 그룹으로 처리됩니다.</div>`,
+  openDialog('옵션 관리', sec('related','연관 (업체/업무 종류)') + sec('status','상태 (To do / Projects)') + sec('tags','태그') + sec('calStatus','캘린더 일정 상태') + sec('planner','기획자') +`<div class="f hint">상태는 대기·보류 → 진행·검토 → 완료·취소·없음 순으로 정렬되며, 완료/취소/없음은 완료 그룹으로 처리됩니다.</div>`,
     ()=>{ save(); });
 }
 document.getElementById('dlgBody').addEventListener('click', e=>{
@@ -826,7 +830,7 @@ function renderBoard(items){
     ${groups[g].sort((a,b)=>(a.start||'9').localeCompare(b.start||'9')).map(c=>`<div class="bcard ${c.done?'done':''}" data-id="${c.id}" draggable="true">
       ${(c.start||c.time||c.hours!=null)?`<div class="m">${c.start?`<span class="chip due">${c.start.slice(5).replace('-','.')}${c.end?'~'+c.end.slice(5).replace('-','.'):''}</span>`:''}${c.time?`<span class="chip due">${esc(c.time)}</span>`:''}${c.hours!=null?`<span class="chip hrs">⏱ ${fmtH(c.hours)}</span>`:''}</div>`:''}
       <div class="t">${esc(c.name)}</div>
-      ${(c.rms||c.status||c.designer)?`<div class="m">${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.designer?`<span class="chip designer">[${esc(c.designer)}]</span>`:''}</div>`:''}
+      ${(c.rms||c.status||c.planner)?`<div class="m">${c.rms?`<a href="${esc(c.rms)}" class="chip rms" target="_blank">[RMS]</a>`:''}${c.status?`<span class="chip st c-${stColor(c.status)}">${esc(c.status)}</span>`:''}${c.planner?`<span class="chip planner">[${esc(c.planner)}]</span>`:''}</div>`:''}
       <label class="bdone"><input type="checkbox" ${c.done?'checked':''} data-act="done">[완료]</label>
     </div>`).join('') || '<div class="empty" style="padding:14px 6px">비어 있음</div>'}</div>`).join('');
 }
@@ -857,13 +861,13 @@ function parseNotes(v){
   return v ? v.split('\n') : [];
 }
 function calDialogCenter(c, presetDate){
-  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], designer:'', rms:''};
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], planner:'', rms:''};
   openDialog(isNew?'일정 추가':'일정 수정', `
     <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
     <div class="fs"><div class="f"><label for="f_start">마감일</label><input type="date" id="f_start" value="${c.start||''}"></div>
     <div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div></div>
     <div class="fs"><div class="f"><label for="f_quad">4분면</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div>
-    <div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,c.designer)}</select></div></div>
+    <div class="f"><label for="f_planner">기획자</label><select id="f_planner"><option value="">(없음)</option>${optHTML(DB.options.planner,c.planner)}</select></div></div>
     <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(c.rms||'')}"></div>
     <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><div class="input-with-hint"><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
     <div class="f"><label for="f_notes">메모 (Enter로 줄바꿈 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" class="auto-height">${esc((c.notes||[]).join('\n'))}</textarea></div>
@@ -871,19 +875,19 @@ function calDialogCenter(c, presetDate){
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
       const start=$v('f_start');
       const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:'', status:$v('f_status'), quad:$v('f_quad'), time:'', hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
-        notes:parseNotes(document.getElementById('f_notes').value), done:document.getElementById('f_done').checked, designer:$v('f_designer'), rms:$v('f_rms') };
+        notes:parseNotes(document.getElementById('f_notes').value), done:document.getElementById('f_done').checked, planner:$v('f_planner'), rms:$v('f_rms') };
       if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
       if(start) calYM = start.slice(0,7); save(); },
     isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); }, 'center');
 }
 function calDialog(c, presetDate){
-  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], designer:'', rms:''};
+  const isNew = !c; c = c || {name:'', start:presetDate||'', end:'', status:'', quad:'작업중', done:false, time:'', hours:null, notes:[], planner:'', rms:''};
   openDialog(isNew?'일정 추가':'일정 수정', `
     <div class="f"><label for="f_name">이름</label><input type="text" id="f_name" value="${esc(c.name)}" placeholder="[DCBGIT-00000] 요청 제목"></div>
     <div class="fs"><div class="f"><label for="f_start">마감일</label><input type="date" id="f_start" value="${c.start||''}"></div>
     <div class="f"><label for="f_status">상태</label><select id="f_status"><option value="">(없음)</option>${optHTML(DB.options.calStatus,c.status)}</select></div></div>
     <div class="fs"><div class="f"><label for="f_quad">4분면</label><select id="f_quad"><option value="">(없음)</option>${optHTML(QUADS,c.quad)}</select></div>
-    <div class="f"><label for="f_designer">기획자</label><select id="f_designer"><option value="">(없음)</option>${optHTML(DB.options.designers,c.designer)}</select></div></div>
+    <div class="f"><label for="f_planner">기획자</label><select id="f_planner"><option value="">(없음)</option>${optHTML(DB.options.planner,c.planner)}</select></div></div>
     <div class="f"><label for="f_rms">RMS 링크</label><input type="url" id="f_rms" placeholder="https://..." value="${esc(c.rms||'')}"></div>
     <div class="f"><label for="f_hours">작업시간 (시간 단위)</label><div class="input-with-hint"><input type="number" id="f_hours" min="0" step="1" value="${c.hours??''}" placeholder="예: 2.5"><div class="hint">1시간 = 0.125 MD (공수 환산표 기준)</div></div></div>
     <div class="f"><label for="f_notes">메모 (Enter로 줄바꿈 — 1. 2. 3. 항목, 레드마인 링크 등. ~~텍스트~~ 는 취소선)</label><textarea id="f_notes" class="auto-height">${esc((c.notes||[]).join('\n'))}</textarea></div>
@@ -891,7 +895,7 @@ function calDialog(c, presetDate){
     ()=>{ const name=$v('f_name'); if(!name){ alert('이름을 입력하세요'); return false; }
       const start=$v('f_start');
       const obj={ id:c.id||uid(), nid:c.nid||null, name, start, end:'', status:$v('f_status'), quad:$v('f_quad'), time:'', hours: $v('f_hours')==='' ? null : Math.max(0, Math.round(Number($v('f_hours')))),
-        notes:parseNotes(document.getElementById('f_notes').value), done:document.getElementById('f_done').checked, designer:$v('f_designer'), rms:$v('f_rms') };
+        notes:parseNotes(document.getElementById('f_notes').value), done:document.getElementById('f_done').checked, planner:$v('f_planner'), rms:$v('f_rms') };
       if(isNew) DB.cal.push(obj); else Object.assign(DB.cal.find(x=>x.id===c.id), obj);
       if(start) calYM = start.slice(0,7); save(); },
     isNew?null:()=>{ DB.cal = DB.cal.filter(x=>x.id!==c.id); save(); });
@@ -1029,10 +1033,10 @@ function toRows(db){
   r.options.push({key:'_months', values:(db.months||[]).map(m=>m.key).sort()}); // 빈 달도 보존
   r.options.push({key:'_noteOrder', values:(db.notes||[]).map(n=>n.id)});       // 드래그로 바꾼 노트 순서
   r.projects = (db.projects||[]).map(p=>({id:p.id, name:p.name||'', related:p.related||'', status:p.status||'', date:nz(p.date), memo:p.memo||''}));
-  r.todos = (db.todos||[]).map(t=>({id:t.id, name:t.name||'', tags:t.tags||[], date:nz(t.date), status:t.status||'', project_id:t.project||'', designer:t.designer||'', rms:t.rms||''}));
+  r.todos = (db.todos||[]).map(t=>({id:t.id, name:t.name||'', tags:t.tags||[], date:nz(t.date), status:t.status||'', project_id:t.project||'', planner:t.planner||'', rms:t.rms||''}));
   r.notes = (db.notes||[]).map(n=>({id:n.id, title:n.title||'', body:n.body||''}));
   r.work_logs = (db.months||[]).flatMap(m=>(m.entries||[]).map(e=>({id:e.id, month_key:m.key, date:nz(e.date), log:e.log||'', memo:e.memo||''})));
-  r.calendar_items = (db.cal||[]).map(c=>({id:c.id, nid:c.nid??null, name:c.name||'', start_date:nz(c.start), end_date:nz(c.end), status:c.status||'', quad:c.quad||'', done:!!c.done, time:c.time||'', hours:c.hours??null, designer:c.designer||'', rms:c.rms||'', who:c.who||[], notes:c.notes||[]}));
+  r.calendar_items = (db.cal||[]).map(c=>({id:c.id, nid:c.nid??null, name:c.name||'', start_date:nz(c.start), end_date:nz(c.end), status:c.status||'', quad:c.quad||'', done:!!c.done, time:c.time||'', hours:c.hours??null, planner:c.planner||'', rms:c.rms||'', who:c.who||[], notes:c.notes||[]}));
   return r;
 }
 // 옛 id(p1, t5, c17, d0901)는 숫자순, 새로 만든 id(uid)는 그 뒤에 생성순
@@ -1050,10 +1054,10 @@ function fromRows(R){
   return {
     version:1, options,
     projects: R.projects.slice().sort(byId).map(p=>({id:p.id, name:p.name, related:p.related, status:p.status, date:ds(p.date), memo:p.memo})),
-    todos: R.todos.slice().sort(byId).map(t=>({id:t.id, name:t.name, tags:t.tags||[], date:ds(t.date), status:t.status, project:t.project_id, designer:t.designer, rms:t.rms})),
+    todos: R.todos.slice().sort(byId).map(t=>({id:t.id, name:t.name, tags:t.tags||[], date:ds(t.date), status:t.status, project:t.project_id, planner:t.planner ?? t['designer'] ?? '', rms:t.rms})),
     notes: R.notes.slice().sort((a,b)=>(noteRank(a)-noteRank(b))||byId(a,b)).map(n=>({id:n.id, title:n.title, body:n.body})),
     months,
-    cal: R.calendar_items.slice().sort(byId).map(c=>({id:c.id, nid:c.nid, name:c.name, start:ds(c.start_date), end:ds(c.end_date), status:c.status, quad:c.quad, done:!!c.done, time:c.time, hours:c.hours, designer:c.designer, rms:c.rms, who:c.who||[], notes:c.notes||[]})),
+    cal: R.calendar_items.slice().sort(byId).map(c=>({id:c.id, nid:c.nid, name:c.name, start:ds(c.start_date), end:ds(c.end_date), status:c.status, quad:c.quad, done:!!c.done, time:c.time, hours:c.hours, planner:c.planner ?? c['designer'] ?? '', rms:c.rms, who:c.who||[], notes:c.notes||[]})),
     updatedAt: new Date().toISOString()
   };
 }
